@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
@@ -75,17 +76,17 @@ class DashboardPageState extends State<DashboardPage> {
 
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Color(0xFF030303),
+        backgroundColor: AppColors.background,
         body: Center(
           child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF96CC28)),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -117,25 +118,25 @@ class DashboardPageState extends State<DashboardPage> {
                       title: 'Net Worth',
                       value: '\$${_totalNetWorth.toStringAsFixed(2)}',
                       icon: Icons.account_balance,
-                      color: const Color(0xFF96CC28), // Lime Accent #96CC28
+                      color: AppColors.limeMoss, // Lime Moss #7DAC20
                     ),
                     HoverSummaryCard(
                       title: 'Liquid Assets',
                       value: '\$${_totalLiquidAssets.toStringAsFixed(2)}',
                       icon: Icons.money,
-                      color: const Color(0xFF96CC28), // Lime Green #96CC28
+                      color: AppColors.limeMoss, // Lime Moss #7DAC20
                     ),
                     HoverSummaryCard(
                       title: 'Credit Debt',
                       value: '\$${_totalCreditDebt.toStringAsFixed(2)}',
                       icon: Icons.credit_card,
-                      color: const Color(0xFFDB1F87), // Hot Pink #DB1F87
+                      color: AppColors.cinnabar, // Cinnabar #CB2549
                     ),
                     HoverSummaryCard(
                       title: 'Retirement Savings',
                       value: '\$${_totalRetirement.toStringAsFixed(2)}',
                       icon: Icons.trending_up,
-                      color: const Color(0xFF5E2CE4), // Deep Purple #5E2CE4
+                      color: AppColors.googleBlue, // Google Blue #9272BF
                     ),
                   ],
                 );
@@ -147,7 +148,7 @@ class DashboardPageState extends State<DashboardPage> {
             Container(
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
-                color: const Color(0xFF0E0E0E),
+                color: AppColors.card,
                 borderRadius: BorderRadius.circular(24.0),
                 border: Border.all(color: Colors.transparent, width: 1),
               ),
@@ -179,9 +180,9 @@ class DashboardPageState extends State<DashboardPage> {
                       // Legend Row
                       Row(
                         children: [
-                          _buildLegendIndicator('Income', const Color(0xFF96CC28)),
+                          _buildLegendIndicator('Income', AppColors.limeMoss),
                           const SizedBox(width: 16),
-                          _buildLegendIndicator('Expenses', const Color(0xFF0717ED)),
+                          _buildLegendIndicator('Expenses', AppColors.lavenderPurple),
                         ],
                       )
                     ],
@@ -211,7 +212,7 @@ class DashboardPageState extends State<DashboardPage> {
             // Short Transaction List
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0E0E0E),
+                color: AppColors.card,
                 borderRadius: BorderRadius.circular(24.0),
                 border: Border.all(color: Colors.transparent, width: 1),
               ),
@@ -236,10 +237,10 @@ class DashboardPageState extends State<DashboardPage> {
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                           leading: CircleAvatar(
-                            backgroundColor: const Color(0xFF030303),
+                            backgroundColor: AppColors.background,
                             child: Icon(
                               isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-                              color: isIncome ? const Color(0xFF96CC28) : const Color(0xFFDB1F87),
+                              color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
                             ),
                           ),
                           title: Text(
@@ -253,7 +254,7 @@ class DashboardPageState extends State<DashboardPage> {
                           trailing: Text(
                             '${isIncome ? "+" : ""}\$${tx.amount.toStringAsFixed(2)}',
                             style: TextStyle(
-                              color: isIncome ? const Color(0xFF96CC28) : const Color(0xFFDB1F87),
+                              color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
                             ),
@@ -381,7 +382,7 @@ class DashboardPageState extends State<DashboardPage> {
             FlSpot(11, 3500),
           ],
           isCurved: true,
-          color: const Color(0xFF96CC28), // Primary Lime #96CC28
+          color: AppColors.limeMoss, // Lime Moss #7DAC20
           barWidth: 4,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
@@ -389,7 +390,7 @@ class DashboardPageState extends State<DashboardPage> {
             show: false,
           ),
         ),
-        // Expenses Line (Vibrant Blue #0717ED)
+        // Expenses Line (Lavender purple #4285F4)
         LineChartBarData(
           spots: const [
             FlSpot(0, 1500),
@@ -401,7 +402,7 @@ class DashboardPageState extends State<DashboardPage> {
             FlSpot(11, 2000),
           ],
           isCurved: true,
-          color: const Color(0xFF0717ED), // Graph Secondary #0717ED
+          color: AppColors.lavenderPurple, // Lavender purple #4285F4
           barWidth: 4,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
@@ -451,11 +452,11 @@ class _HoverSummaryCardState extends State<HoverSummaryCard> {
             ? Matrix4.translationValues(0.0, -4.0, 0.0) 
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: const Color(0xFF0E0E0E),
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovered 
-                ? const Color(0xFF96CC28) // Primary Lime #96CC28 highlight on hover
+                ? AppColors.limeMoss // Lime Moss #7DAC20 highlight on hover
                 : Colors.transparent,
             width: 1.5,
           ),

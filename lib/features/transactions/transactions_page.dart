@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
@@ -101,9 +102,9 @@ class TransactionsPageState extends State<TransactionsPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF96CC28),
+              primary: AppColors.limeMoss,
               onPrimary: Colors.black,
-              surface: Color(0xFF0E0E0E),
+              surface: AppColors.card,
               onSurface: Colors.white,
             ),
           ),
@@ -142,11 +143,11 @@ class TransactionsPageState extends State<TransactionsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: AppColors.background,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(130),
         child: Container(
-          color: const Color(0xFF0E0E0E),
+          color: AppColors.card,
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -159,7 +160,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                 decoration: InputDecoration(
                   hintText: 'Search description, tags, amount, category...',
                   hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF96CC28)),
+                  prefixIcon: const Icon(Icons.search, color: AppColors.limeMoss),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, color: Colors.white54),
@@ -170,7 +171,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                         )
                       : null,
                   filled: true,
-                  fillColor: const Color(0xFF030303),
+                  fillColor: AppColors.background,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24.0),
@@ -186,7 +187,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today, size: 16, color: Color(0xFF96CC28)),
+                      const Icon(Icons.calendar_today, size: 16, color: AppColors.limeMoss),
                       const SizedBox(width: 8),
                       Text(
                         _startDate == null
@@ -206,8 +207,8 @@ class TransactionsPageState extends State<TransactionsPage> {
                         ),
                       TextButton.icon(
                         onPressed: _selectStartDate,
-                        icon: const Icon(Icons.date_range, size: 16, color: Color(0xFF96CC28)),
-                        label: const Text('Pick Date', style: TextStyle(color: Color(0xFF96CC28), fontSize: 13)),
+                        icon: const Icon(Icons.date_range, size: 16, color: AppColors.limeMoss),
+                        label: const Text('Pick Date', style: TextStyle(color: AppColors.limeMoss, fontSize: 13)),
                       ),
                     ],
                   )
@@ -220,7 +221,7 @@ class TransactionsPageState extends State<TransactionsPage> {
       body: _transactions.isEmpty && _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF96CC28)),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
               ),
             )
           : _transactions.isEmpty
@@ -238,7 +239,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                         padding: EdgeInsets.symmetric(vertical: 24.0),
                         child: Center(
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF96CC28)),
+                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
                           ),
                         ),
                       );
@@ -264,7 +265,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                                   Text(
                                     tx.categoryName ?? 'Uncategorized',
                                     style: const TextStyle(
-                                      color: Color(0xFF96CC28),
+                                      color: AppColors.limeMoss,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1.1,
@@ -273,7 +274,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                                   Text(
                                     '${isIncome ? "+" : ""}\$${tx.amount.toStringAsFixed(2)}',
                                     style: TextStyle(
-                                      color: isIncome ? const Color(0xFF96CC28) : const Color(0xFFDB1F87),
+                                      color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
@@ -324,9 +325,9 @@ class TransactionsPageState extends State<TransactionsPage> {
                                     return Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF5E2CE4).withOpacity(0.15), // Purple tag accent
+                                        color: AppColors.googleBlue.withOpacity(0.15), // Purple tag accent
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: const Color(0xFF5E2CE4).withOpacity(0.4), width: 1),
+                                        border: Border.all(color: AppColors.googleBlue.withOpacity(0.4), width: 1),
                                       ),
                                       child: Text(
                                         tag.trim(),
@@ -386,11 +387,11 @@ class _HoverTransactionCardState extends State<HoverTransactionCard> {
             ? Matrix4.translationValues(2.0, 0.0, 0.0) 
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: const Color(0xFF0E0E0E),
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovered 
-                ? const Color(0xFF96CC28) // Primary Lime #96CC28 highlight on hover
+                ? AppColors.limeMoss // Lime Moss #7DAC20 highlight on hover
                 : Colors.transparent,
             width: 1,
           ),

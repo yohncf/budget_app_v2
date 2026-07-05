@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
 
@@ -20,18 +21,18 @@ String _generateUuid() {
 Color _getColorForAccountType(String type) {
   switch (type) {
     case 'checking':
-      return const Color(0xFF96CC28); // Primary Lime #96CC28
+      return AppColors.limeMoss; // Lime Moss #7DAC20
     case 'savings':
-      return const Color(0xFF96CC28); // Primary Lime #96CC28
+      return AppColors.limeMoss; // Lime Moss #7DAC20
     case 'credit_card':
-      return const Color(0xFFDB1F87); // Hot Pink #DB1F87
+      return AppColors.cinnabar; // Cinnabar #CB2549
     case 'investment':
-      return const Color(0xFF0717ED); // Vibrant Blue #0717ED
+      return AppColors.lavenderPurple; // Lavender purple #4285F4
     case 'crypto_wallet':
-      return const Color(0xFF5E2CE4); // Deep Purple #5E2CE4
+      return AppColors.googleBlue; // Google Blue #9272BF
     case 'cash':
     default:
-      return const Color(0xFF96CC28); // Primary Lime
+      return AppColors.limeMoss; // Lime Moss
   }
 }
 
@@ -112,7 +113,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: Color(0xFFDB1F87), size: 28),
+            const Icon(Icons.warning_amber_rounded, color: AppColors.cinnabar, size: 28),
             const SizedBox(width: 8),
             Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
@@ -121,7 +122,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK', style: TextStyle(color: Color(0xFF96CC28), fontWeight: FontWeight.bold)),
+            child: const Text('OK', style: TextStyle(color: AppColors.limeMoss, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -163,21 +164,21 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF96CC28)),
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: AppColors.background,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(48),
         child: Container(
-          color: const Color(0xFF0E0E0E),
+          color: AppColors.card,
           child: TabBar(
             controller: _tabController,
-            indicatorColor: const Color(0xFF96CC28),
-            labelColor: const Color(0xFF96CC28),
+            indicatorColor: AppColors.limeMoss,
+            labelColor: AppColors.limeMoss,
             unselectedLabelColor: Colors.white70,
             tabs: const [
               Tab(text: 'Cash and Credit'),
@@ -268,7 +269,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                     Text(
                       '\$${acc.currentBalance.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: acc.currentBalance >= 0 ? const Color(0xFF96CC28) : const Color(0xFFDB1F87),
+                        color: acc.currentBalance >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -291,7 +292,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                 // Menu items
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white),
-                  color: const Color(0xFF0E0E0E),
+                  color: AppColors.card,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   onSelected: (value) {
                     if (value == 'edit') {
@@ -305,7 +306,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                       value: 'edit',
                       child: Row(
                         children: [
-                          Icon(Icons.edit, color: Color(0xFF96CC28), size: 20),
+                          Icon(Icons.edit, color: AppColors.limeMoss, size: 20),
                           SizedBox(width: 8),
                           Text('Edit', style: TextStyle(color: Colors.white)),
                         ],
@@ -316,7 +317,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                         value: 'archive',
                         child: Row(
                           children: [
-                            Icon(Icons.archive, color: Color(0xFFDB1F87), size: 20),
+                            Icon(Icons.archive, color: AppColors.cinnabar, size: 20),
                             SizedBox(width: 8),
                             Text('Archive', style: TextStyle(color: Colors.white)),
                           ],
@@ -434,14 +435,14 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF0E0E0E),
+          backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Error Saving Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: Text(e.toString().replaceFirst('Exception: ', ''), style: const TextStyle(color: Colors.white)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('OK', style: TextStyle(color: Color(0xFF96CC28))),
+              child: const Text('OK', style: TextStyle(color: AppColors.limeMoss)),
             ),
           ],
         ),
@@ -458,7 +459,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     final isEdit = widget.account != null;
 
     return AlertDialog(
-      backgroundColor: const Color(0xFF0E0E0E),
+      backgroundColor: AppColors.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24.0), // Rounded corners M3
       ),
@@ -480,7 +481,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: 'Account Name',
                   labelStyle: TextStyle(color: Colors.white70),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF96CC28))),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.limeMoss)),
                 ),
                 validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
                 onSaved: (val) => _name = val!.trim(),
@@ -495,7 +496,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: 'Institution',
                   labelStyle: TextStyle(color: Colors.white70),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF96CC28))),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.limeMoss)),
                 ),
                 validator: (val) => val == null || val.trim().isEmpty ? 'Institution is required' : null,
                 onSaved: (val) => _institution = val!.trim(),
@@ -512,7 +513,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelStyle: TextStyle(color: Colors.white70),
                   counterStyle: TextStyle(color: Colors.white30),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF96CC28))),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.limeMoss)),
                 ),
                 validator: (val) => val == null || val.trim().length != 3 ? 'Must be exactly 3 characters' : null,
                 onSaved: (val) => _currency = val!.toUpperCase().trim(),
@@ -528,7 +529,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: 'Current Balance (\$)',
                   labelStyle: TextStyle(color: Colors.white70),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF96CC28))),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.limeMoss)),
                 ),
                 validator: (val) => val == null || double.tryParse(val) == null ? 'Enter a valid number' : null,
                 onSaved: (val) => _balance = double.parse(val!),
@@ -544,7 +545,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: 'Limit / Overdraft Limit (\$)',
                   labelStyle: TextStyle(color: Colors.white70),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF96CC28))),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.limeMoss)),
                 ),
                 validator: (val) => val == null || double.tryParse(val) == null || double.parse(val) < 0
                     ? 'Enter a positive number'
@@ -573,7 +574,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               // Account Group Dropdown
               DropdownButtonFormField<String>(
                 value: _accountGroup,
-                dropdownColor: const Color(0xFF0E0E0E),
+                dropdownColor: AppColors.card,
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Account Group',
@@ -590,7 +591,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               // Status Dropdown
               DropdownButtonFormField<String>(
                 value: _status,
-                dropdownColor: const Color(0xFF0E0E0E),
+                dropdownColor: AppColors.card,
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Status',
@@ -614,7 +615,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         ElevatedButton(
           onPressed: _isSaving ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF96CC28),
+            backgroundColor: AppColors.limeMoss,
             foregroundColor: Colors.black,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
@@ -660,18 +661,18 @@ class _HoverAccountCardState extends State<HoverAccountCard> {
             ? Matrix4.translationValues(2.0, 0.0, 0.0) 
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: const Color(0xFF0E0E0E),
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovered 
-                ? const Color(0xFF96CC28) // Primary Lime #96CC28 highlight on hover
+                ? AppColors.limeMoss // Lime Moss #7DAC20 highlight on hover
                 : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
               color: _isHovered 
-                  ? const Color(0x1496CC28) // 8% opacity Primary Lime glow on hover
+                  ? AppColors.limeMoss.withOpacity(0.08) // 8% opacity Lime Moss glow on hover
                   : Colors.black.withOpacity(0.15),
               blurRadius: _isHovered ? 8 : 4,
               offset: const Offset(0, 2),

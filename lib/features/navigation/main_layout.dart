@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import '../../core/services/auth_service.dart';
 import '../dashboard/dashboard_page.dart';
 import '../accounts/accounts_page.dart';
@@ -87,36 +88,36 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
     final List<NavigationDestination> destinations = const [
       NavigationDestination(
         icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard, color: Color(0xFF96CC28)),
+        selectedIcon: Icon(Icons.dashboard, color: AppColors.limeMoss),
         label: 'Dashboard',
       ),
       NavigationDestination(
         icon: Icon(Icons.account_balance_wallet_outlined),
-        selectedIcon: Icon(Icons.account_balance_wallet, color: Color(0xFF96CC28)),
+        selectedIcon: Icon(Icons.account_balance_wallet, color: AppColors.limeMoss),
         label: 'Accounts',
       ),
       NavigationDestination(
         icon: Icon(Icons.swap_horiz_outlined),
-        selectedIcon: Icon(Icons.swap_horiz, color: Color(0xFF96CC28)),
+        selectedIcon: Icon(Icons.swap_horiz, color: AppColors.limeMoss),
         label: 'Transactions',
       ),
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: AppColors.background,
       appBar: isDesktop
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF030303),
+              backgroundColor: AppColors.background,
               elevation: 0,
               title: Row(
                 children: [
-                  const Icon(Icons.account_balance_wallet, color: Color(0xFF96CC28), size: 24),
+                  const Icon(Icons.account_balance_wallet, color: AppColors.limeMoss, size: 24),
                   const SizedBox(width: 8),
                   Text(
                     'BAREN BUDGET',
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF96CC28),
+                      color: AppColors.limeMoss,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
                     ),
@@ -146,13 +147,13 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
               if (isDesktop) ...[
                 // Desktop Sidebar Navigation Rail
                 Container(
-                  color: const Color(0xFF030303),
+                  color: AppColors.background,
                   child: Column(
                     children: [
                       Expanded(
                         child: NavigationRail(
                           extended: _isRailExpanded,
-                          backgroundColor: const Color(0xFF030303),
+                          backgroundColor: AppColors.background,
                           selectedIndex: _selectedIndex,
                           minWidth: 72,
                           onDestinationSelected: (int index) {
@@ -171,12 +172,12 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.account_balance_wallet, color: Color(0xFF96CC28), size: 24),
+                                            const Icon(Icons.account_balance_wallet, color: AppColors.limeMoss, size: 24),
                                             const SizedBox(width: 8),
                                             Text(
                                               'BAREN BUDGET',
                                               style: theme.textTheme.titleMedium?.copyWith(
-                                                color: const Color(0xFF96CC28),
+                                                color: AppColors.limeMoss,
                                                 fontWeight: FontWeight.bold,
                                                 letterSpacing: 1.0,
                                               ),
@@ -184,7 +185,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                                           ],
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.menu_open, color: Color(0xFF96CC28)),
+                                          icon: const Icon(Icons.menu_open, color: AppColors.limeMoss),
                                           onPressed: () {
                                             setState(() {
                                               _isRailExpanded = false;
@@ -198,7 +199,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                                     padding: const EdgeInsets.symmetric(vertical: 16.0),
                                     child: Center(
                                       child: IconButton(
-                                        icon: const Icon(Icons.menu, color: Color(0xFF96CC28)),
+                                        icon: const Icon(Icons.menu, color: AppColors.limeMoss),
                                         onPressed: () {
                                           setState(() {
                                             _isRailExpanded = true;
@@ -218,7 +219,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                               ),
                             );
                           }).toList(),
-                          selectedIconTheme: const IconThemeData(color: Color(0xFF96CC28)),
+                          selectedIconTheme: const IconThemeData(color: AppColors.limeMoss),
                           unselectedIconTheme: const IconThemeData(color: Colors.white70),
                           labelType: NavigationRailLabelType.none,
                         ),
@@ -370,7 +371,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                 // background colors based on whether the speed dial is open (slate purple) or closed (volt lime).
                 FloatingActionButton(
                   heroTag: 'main_fab',
-                  backgroundColor: _isMenuOpen ? const Color(0xFF5D528F) : const Color(0xFF96CC28),
+                  backgroundColor: _isMenuOpen ? const Color(0xFF5D528F) : AppColors.limeMoss,
                   foregroundColor: _isMenuOpen ? Colors.white : Colors.black,
                   shape: const CircleBorder(),
                   onPressed: _toggleMenu,
@@ -386,8 +387,8 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       ),
       bottomNavigationBar: !isDesktop
           ? NavigationBar(
-              backgroundColor: const Color(0xFF0E0E0E),
-              indicatorColor: const Color(0xFF96CC28).withOpacity(0.3),
+              backgroundColor: AppColors.card,
+              indicatorColor: AppColors.limeMoss.withOpacity(0.3),
               selectedIndex: _selectedIndex,
               elevation: 8,
               onDestinationSelected: (int index) {

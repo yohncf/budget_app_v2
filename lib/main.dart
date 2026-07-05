@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
@@ -73,31 +74,31 @@ class _MyAppState extends State<MyApp> {
       useMaterial3: true,
       brightness: Brightness.dark,
       fontFamily: GoogleFonts.roboto().fontFamily,
-      scaffoldBackgroundColor: const Color(0xFF030303), // Always App Background #030303
+      scaffoldBackgroundColor: AppColors.background, // Always App Background #030303
       colorScheme: const ColorScheme.dark(
-        primary: Color(0xFF96CC28), // Primary Lime #96CC28
-        secondary: Color(0xFF5E2CE4), // Deep Purple #5E2CE4
-        tertiary: Color(0xFF0717ED), // Vibrant Blue #0717ED
-        surface: Color(0xFF0E0E0E), // Cards Background #0E0E0E
-        error: Color(0xFFDB1F87), // Error Messages #DB1F87
+        primary: AppColors.limeMoss, // Lime Moss #7DAC20
+        secondary: AppColors.googleBlue, // Google Blue #4285F4
+        tertiary: AppColors.lavenderPurple, // Lavender purple #9272BF
+        surface: AppColors.card, // Cards Background #0E0E0E
+        error: AppColors.cinnabar, // Cinnabar #E3647F
       ),
       cardTheme: CardThemeData(
-        color: const Color(0xFF0E0E0E),
+        color: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: const Color(0xFF0E0E0E),
+        backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF030303),
+        backgroundColor: AppColors.background,
         elevation: 0,
         centerTitle: false,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF030303),
+        fillColor: AppColors.background,
         labelStyle: const TextStyle(color: Colors.white),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -106,7 +107,7 @@ class _MyAppState extends State<MyApp> {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF96CC28),
+          backgroundColor: AppColors.limeMoss,
           foregroundColor: const Color(0xFF09090B),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           shape: RoundedRectangleBorder(
@@ -118,8 +119,8 @@ class _MyAppState extends State<MyApp> {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF96CC28),
-          side: const BorderSide(color: Color(0xFF96CC28), width: 1.5),
+          foregroundColor: AppColors.limeMoss,
+          side: const BorderSide(color: AppColors.limeMoss, width: 1.5),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -129,7 +130,7 @@ class _MyAppState extends State<MyApp> {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF96CC28),
+          foregroundColor: AppColors.limeMoss,
           textStyle: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),

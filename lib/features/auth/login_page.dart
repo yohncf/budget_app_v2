@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/auth_service.dart';
 import 'google_sign_in_button.dart';
@@ -124,7 +125,7 @@ class _LoginPageState extends State<LoginPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030303), // Always App Background -> #030303
+      backgroundColor: AppColors.background, // Always App Background -> #030303
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -132,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
             constraints: const BoxConstraints(maxWidth: 400),
             padding: const EdgeInsets.all(32.0),
             decoration: BoxDecoration(
-              color: const Color(0xFF0E0E0E), // Dark Charcoal -> #0E0E0E
+              color: AppColors.card, // Dark Charcoal -> #0E0E0E
               borderRadius: BorderRadius.circular(28.0), // Rounded corners M3
               border: Border.all(color: Colors.transparent, width: 1),
             ),
@@ -148,14 +149,14 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       const Icon(
                         Icons.account_balance_wallet,
-                        color: Color(0xFF96CC28), // Lime Accent
+                        color: AppColors.limeMoss, // Lime Moss
                         size: 36,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         'ANTIGRAVITY',
                         style: theme.textTheme.headlineMedium?.copyWith(
-                          color: const Color(0xFF96CC28), // Primary Lime
+                          color: AppColors.limeMoss, // Lime Moss
                           fontWeight: FontWeight.bold,
                           letterSpacing: 2,
                         ),
@@ -190,16 +191,16 @@ class _LoginPageState extends State<LoginPage> {
                     decoration: InputDecoration(
                       labelText: 'Email Address',
                       labelStyle: const TextStyle(color: Colors.white),
-                      prefixIcon: const Icon(Icons.email, color: Color(0xFF96CC28)),
+                      prefixIcon: const Icon(Icons.email, color: AppColors.limeMoss),
                       filled: true,
-                      fillColor: const Color(0xFF030303),
+                      fillColor: AppColors.background,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF96CC28), width: 1.5),
+                        borderSide: const BorderSide(color: AppColors.limeMoss, width: 1.5),
                       ),
                     ),
                     validator: (value) {
@@ -222,16 +223,16 @@ class _LoginPageState extends State<LoginPage> {
                     decoration: InputDecoration(
                       labelText: 'Password',
                       labelStyle: const TextStyle(color: Colors.white),
-                      prefixIcon: const Icon(Icons.lock, color: Color(0xFF96CC28)),
+                      prefixIcon: const Icon(Icons.lock, color: AppColors.limeMoss),
                       filled: true,
-                      fillColor: const Color(0xFF030303),
+                      fillColor: AppColors.background,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF96CC28), width: 1.5),
+                        borderSide: const BorderSide(color: AppColors.limeMoss, width: 1.5),
                       ),
                     ),
                     validator: (value) {
@@ -268,7 +269,7 @@ class _LoginPageState extends State<LoginPage> {
                   ElevatedButton(
                     onPressed: _isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF96CC28), // Lime Accent
+                      backgroundColor: AppColors.limeMoss, // Lime Moss
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -312,7 +313,7 @@ class _LoginPageState extends State<LoginPage> {
                       });
                     },
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF96CC28),
+                      foregroundColor: AppColors.limeMoss,
                     ),
                     child: Text(_isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'),
                   ),

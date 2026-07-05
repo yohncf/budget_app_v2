@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/models.dart';
@@ -349,9 +350,9 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF96CC28),
+              primary: AppColors.limeMoss,
               onPrimary: Colors.black,
-              surface: Color(0xFF0E0E0E),
+              surface: AppColors.card,
               onSurface: Colors.white,
             ),
           ),
@@ -399,7 +400,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Source and destination accounts must be different.'),
-          backgroundColor: Color(0xFFDB1F87),
+          backgroundColor: AppColors.cinnabar,
         ),
       );
       return;
@@ -524,7 +525,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0E0E0E),
+        backgroundColor: AppColors.card,
         title: const Text('Delete Transaction', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text('Are you sure you want to delete this transaction? This will also revert the balance updates on the associated account(s).', style: TextStyle(color: Colors.white70)),
         actions: [
@@ -534,7 +535,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDB1F87)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.cinnabar),
             child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -564,13 +565,13 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0E0E0E),
+        backgroundColor: AppColors.card,
         title: const Text('Error', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(msg, style: const TextStyle(color: Colors.white)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK', style: TextStyle(color: Color(0xFF96CC28))),
+            child: const Text('OK', style: TextStyle(color: AppColors.limeMoss)),
           ),
         ],
       ),
@@ -579,11 +580,11 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
 
   Color _getHighlightColor() {
     if (_tabController.index == 0) {
-      return const Color(0xFFDB1F87);
+      return AppColors.cinnabar;
     } else if (_tabController.index == 1) {
-      return const Color(0xFF96CC28);
+      return AppColors.limeMoss;
     } else {
-      return const Color(0xFF5E2CE4);
+      return AppColors.googleBlue;
     }
   }
 
@@ -605,11 +606,11 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     );
     final errBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(16),
-      borderSide: const BorderSide(color: Color(0xFFDB1F87), width: 1.5),
+      borderSide: const BorderSide(color: AppColors.cinnabar, width: 1.5),
     );
     final focusErrBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(16),
-      borderSide: const BorderSide(color: Color(0xFFDB1F87), width: 2),
+      borderSide: const BorderSide(color: AppColors.cinnabar, width: 2),
     );
 
     if (hasContent) {
@@ -637,7 +638,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
         prefixText: prefixText,
         prefixStyle: TextStyle(color: highlightColor, fontWeight: FontWeight.bold),
         filled: true,
-        fillColor: const Color(0xFF030303),
+        fillColor: AppColors.background,
         enabledBorder: UnderlineInputBorder(
           borderSide: const BorderSide(color: Colors.white10),
           borderRadius: BorderRadius.circular(16),
@@ -647,11 +648,11 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           borderRadius: BorderRadius.circular(16),
         ),
         errorBorder: UnderlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFFDB1F87), width: 1.5),
+          borderSide: const BorderSide(color: AppColors.cinnabar, width: 1.5),
           borderRadius: BorderRadius.circular(16),
         ),
         focusedErrorBorder: UnderlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFFDB1F87), width: 2),
+          borderSide: const BorderSide(color: AppColors.cinnabar, width: 2),
           borderRadius: BorderRadius.circular(16),
         ),
       );
@@ -666,13 +667,13 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     if (_isLoading) {
       return Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0E0E0E),
+          color: AppColors.card,
           borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
         ),
         padding: const EdgeInsets.symmetric(vertical: 48),
         child: const Center(
           child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF96CC28)),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
           ),
         ),
       );
@@ -685,7 +686,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0E0E0E),
+          color: AppColors.card,
           borderRadius: BorderRadius.only(topLeft: Radius.circular(28.0), topRight: Radius.circular(28.0)),
         ),
         child: SingleChildScrollView(
@@ -713,7 +714,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
                     ),
                     if (isEdit)
                       IconButton(
-                        icon: const Icon(Icons.delete, color: Color(0xFFDB1F87)),
+                        icon: const Icon(Icons.delete, color: AppColors.cinnabar),
                         tooltip: 'Delete Transaction',
                         onPressed: _isSaving ? null : _delete,
                       ),
@@ -750,7 +751,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF030303),
+                            color: AppColors.background,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.white10),
                           ),
@@ -903,7 +904,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
                             flex: 2,
                             child: DropdownButtonFormField<String>(
                               value: _currency,
-                              dropdownColor: const Color(0xFF0E0E0E),
+                              dropdownColor: AppColors.card,
                               borderRadius: BorderRadius.circular(16),
                               style: TextStyle(color: highlightColor, fontWeight: FontWeight.bold, fontSize: 16),
                               decoration: _buildInputDecoration(

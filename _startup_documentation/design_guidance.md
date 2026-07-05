@@ -22,10 +22,10 @@ The color scheme is derived from the custom brand palette. Below are the hex cod
 | :--- | :--- | :--- | :--- |
 | **Black Background** | `#030303` | Background (Primary) | Used as the main background color for the entire app. |
 | **Dark Grey Card** | `#0E0E0E` | Surface / Card / Active Navigation | Used for cards, dropdowns, navigation containers, dialogs, and active/selected navigation states. |
-| **Primary Lime** | `#96CC28` | Primary Accent / Hover / Graph Primary | Used for Floating Action Buttons (FAB), hover borders/glows, graph primary indicators, active highlights, and clicked effects. |
-| **Deep Purple** | `#5E2CE4` | FAB Menu / Pills / Accents | Used for Speed Dial menus, transaction tags/pills, and specific category accents. |
-| **Vibrant Blue** | `#0717ED` | Graph Secondary | Used for secondary elements/lines on graphs. |
-| **Hot Pink** | `#DB1F87` | Alerts / Errors / Warnings | Used for error messages, outflow warnings, and negative budget alerts. |
+| **Lime Moss** | `#7DAC20` | Primary Accent / Hover / Graph Primary | Used for Floating Action Buttons (FAB), hover borders/glows, graph primary indicators, active highlights, and clicked effects. |
+| **Lavender purple** | `#9272BF` | Graph Secondary | Used for secondary elements/lines on graphs. |
+| **Google Blue** | `#4285F4` | FAB Menu / Pills / Accents | Used for Speed Dial menus, transaction tags/pills, and specific category accents. |
+| **Cinnabar** | `#EE4D44` | Alerts / Errors / Warnings | Used for error messages, outflow warnings, and negative budget alerts. |
 
 ---
 
