@@ -214,4 +214,16 @@ class DatabaseService {
       rethrow;
     }
   }
+
+  // --- ACCOUNT SNAPSHOTS ---
+  Future<void> createAccountSnapshots(List<AccountSnapshot> snapshots) async {
+    try {
+      final jsonList = snapshots.map((s) => s.toJson()).toList();
+      await _client.from('account_snapshots').insert(jsonList);
+    } catch (e) {
+      print('Supabase createAccountSnapshots error: $e');
+      rethrow;
+    }
+  }
 }
+

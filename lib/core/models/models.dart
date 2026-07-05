@@ -245,3 +245,36 @@ class Transaction {
     );
   }
 }
+
+class AccountSnapshot {
+  final String id;
+  final String accountId;
+  final DateTime snapshotDate;
+  final double balance;
+
+  AccountSnapshot({
+    required this.id,
+    required this.accountId,
+    required this.snapshotDate,
+    required this.balance,
+  });
+
+  factory AccountSnapshot.fromJson(Map<String, dynamic> json) {
+    return AccountSnapshot(
+      id: json['id'] as String,
+      accountId: json['account_id'] as String,
+      snapshotDate: DateTime.parse(json['snapshot_date'] as String),
+      balance: (json['balance'] as num).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'account_id': accountId,
+      'snapshot_date': snapshotDate.toIso8601String(),
+      'balance': balance,
+    };
+  }
+}
+

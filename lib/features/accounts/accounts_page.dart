@@ -105,6 +105,79 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     }
   }
 
+  Future<void> _createSnapshot() async {
+    final activeAccounts = _accounts.where((acc) => acc.status != 'archived').toList();
+    if (activeAccounts.isEmpty) {
+      _showErrorDialog('No Active Accounts', 'There are no active accounts to take a snapshot of.');
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.camera_alt_outlined, color: AppColors.limeMoss, size: 28),
+            SizedBox(width: 8),
+            Text('Create Snapshot?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'This will record a balance snapshot for ${activeAccounts.length} active accounts. Do you want to proceed?',
+          style: const TextStyle(color: Colors.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.limeMoss,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final snapshotDate = DateTime.now();
+      final snapshots = activeAccounts.map((acc) {
+        return AccountSnapshot(
+          id: _generateUuid(),
+          accountId: acc.id,
+          snapshotDate: snapshotDate,
+          balance: acc.currentBalance,
+        );
+      }).toList();
+
+      await _databaseService.createAccountSnapshots(snapshots);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully created snapshots for ${activeAccounts.length} accounts.'),
+          backgroundColor: const Color(0xFF04E07B),
+        ),
+      );
+    } catch (e) {
+      _showErrorDialog('Snapshot Failed', e.toString());
+    } finally {
+      loadAccounts();
+    }
+  }
+
   void _showErrorDialog(String title, String message) {
     showDialog(
       context: context,
@@ -180,30 +253,63 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: Container(
-          color: AppColors.card,
-          child: TabBar(
-            controller: _tabController,
-            indicatorColor: AppColors.limeMoss,
-            labelColor: AppColors.limeMoss,
-            unselectedLabelColor: Colors.white70,
-            tabs: const [
-              Tab(text: 'Cash and Credit'),
-              Tab(text: 'Capital and retirement'),
-              Tab(text: 'Archived'),
-            ],
-          ),
+      body: NestedScrollView(
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return <Widget>[
+            SliverAppBar.medium(
+              backgroundColor: AppColors.background,
+              title: const Text(
+                'Accounts',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16.0),
+                  child: TextButton.icon(
+                    onPressed: _createSnapshot,
+                    icon: const Icon(Icons.camera_alt_outlined, color: AppColors.limeMoss, size: 18),
+                    label: const Text(
+                      'Create Snapshot',
+                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.05),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SliverTabBarDelegate(
+                TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppColors.limeMoss,
+                  labelColor: AppColors.limeMoss,
+                  unselectedLabelColor: Colors.white70,
+                  tabs: const [
+                    Tab(text: 'Cash and Credit'),
+                    Tab(text: 'Capital and retirement'),
+                    Tab(text: 'Archived'),
+                  ],
+                ),
+              ),
+            ),
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildAccountList(_cashAndCreditAccounts),
+            _buildAccountList(_capitalAndRetirementAccounts),
+            _buildAccountList(_archivedAccounts, isArchivedTab: true),
+          ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildAccountList(_cashAndCreditAccounts),
-          _buildAccountList(_capitalAndRetirementAccounts),
-          _buildAccountList(_archivedAccounts, isArchivedTab: true),
-        ],
       ),
     );
   }
@@ -692,5 +798,29 @@ class _HoverAccountCardState extends State<HoverAccountCard> {
         child: widget.child,
       ),
     );
+  }
+}
+
+class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar tabBar;
+
+  _SliverTabBarDelegate(this.tabBar);
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: AppColors.card,
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
+    return tabBar != oldDelegate.tabBar;
   }
 }

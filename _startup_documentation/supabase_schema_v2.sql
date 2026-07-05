@@ -88,9 +88,7 @@ CREATE TABLE account_snapshots (
     id UUID PRIMARY KEY,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     snapshot_date TIMESTAMPTZ NOT NULL,
-    balance FLOAT8 NOT NULL,
-    currency VARCHAR(3) NOT NULL CHECK (length(currency) = 3),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    balance FLOAT8 NOT NULL
 );
 
 -- 7. HOLDINGS TABLE

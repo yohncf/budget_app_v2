@@ -100,8 +100,6 @@ This document outlines the architecture, relationships, constraints, and operati
 | `account_id` | `UUID` | `NOT NULL`, `REF` | Target account (`ON DELETE CASCADE`). |
 | `snapshot_date` | `TIMESTAMPTZ`| `NOT NULL` | Historical moment node representing balances. |
 | `balance` | `FLOAT8` | `NOT NULL` | Exact balance on target date. |
-| `currency` | `VARCHAR(3)`| `NOT NULL`, `CHECK` | Target index isolation currency. |
-| `created_at` | `TIMESTAMPTZ`| `NOT NULL` | Physical evaluation engine runtime marker. |
 
 ### 7. `holdings`
 | Column | Data Type | Constraint | Explanation / Rules |
