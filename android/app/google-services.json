@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1006598018185",
+    "project_id": "budget-app-81120",
+    "storage_bucket": "budget-app-81120.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1006598018185:android:1d4e8e9b84c69553c92258",
+        "android_client_info": {
+          "package_name": "com.example.budget_app_v2"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1006598018185-0jjngun0qctjsbrs3fat1441hf9vrlu8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtwDbu2YDwjROdZfYKaC5FtucZW0vm4U8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1006598018185-0jjngun0qctjsbrs3fat1441hf9vrlu8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
