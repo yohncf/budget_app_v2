@@ -139,12 +139,19 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     );
   }
 
+  int _compareAccounts(Account a, Account b) {
+    final typeCompare = a.type.toLowerCase().compareTo(b.type.toLowerCase());
+    if (typeCompare != 0) return typeCompare;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+
   List<Account> get _cashAndCreditAccounts {
     return _accounts
         .where((acc) =>
             acc.status != 'archived' &&
             (acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'credit' || acc.accountGroup == 'credits'))
-        .toList();
+        .toList()
+      ..sort(_compareAccounts);
   }
 
   List<Account> get _capitalAndRetirementAccounts {
@@ -152,11 +159,13 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
         .where((acc) =>
             acc.status != 'archived' &&
             (acc.accountGroup == 'capital' || acc.accountGroup == 'retirement'))
-        .toList();
+        .toList()
+      ..sort(_compareAccounts);
   }
 
   List<Account> get _archivedAccounts {
-    return _accounts.where((acc) => acc.status == 'archived').toList();
+    return _accounts.where((acc) => acc.status == 'archived').toList()
+      ..sort(_compareAccounts);
   }
 
   @override
