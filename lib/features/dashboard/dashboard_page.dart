@@ -20,6 +20,7 @@ class DashboardPageState extends State<DashboardPage> {
   List<Transaction> _transactions = [];
   List<Transaction> _chartTransactions = [];
   String _chartMode = 'cumulative'; // 'cumulative' or 'daily'
+  String _chartRange = '60days'; // '60days' or 'currentMonth'
   bool _isLoading = true;
   bool _showHoldingInChecking = false;
 
@@ -223,6 +224,10 @@ class DashboardPageState extends State<DashboardPage> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 600;
+                      
+                      final dynamic rawRange = _chartRange;
+                      final String range = rawRange == null ? '60days' : rawRange as String;
+
                       final titleColumn = Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -235,13 +240,17 @@ class DashboardPageState extends State<DashboardPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Checking Income vs Credit Card Expenses (Last 60 Days)',
+                            range == 'currentMonth'
+                                ? 'Checking Income vs Credit Card Expenses (Current Month)'
+                                : 'Checking Income vs Credit Card Expenses (Last 60 Days)',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: Colors.white54,
                             ),
                           ),
                         ],
                       );
+
+                      final rangeWidget = _buildRangeChips();
 
                       final controlsRow = Row(
                         mainAxisSize: MainAxisSize.min,
@@ -263,8 +272,16 @@ class DashboardPageState extends State<DashboardPage> {
                         return Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: titleColumn),
-                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Expanded(child: titleColumn),
+                                  const SizedBox(width: 16),
+                                  rangeWidget,
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
                             controlsRow,
                           ],
                         );
@@ -273,6 +290,8 @@ class DashboardPageState extends State<DashboardPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             titleColumn,
+                            const SizedBox(height: 12),
+                            rangeWidget,
                             const SizedBox(height: 16),
                             controlsRow,
                           ],
@@ -429,12 +448,71 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildRangeChips() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(4.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildRangeChipOption('60days', '60 Days'),
+          _buildRangeChipOption('currentMonth', 'This Month'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRangeChipOption(String range, String label) {
+    final dynamic rawRange = _chartRange;
+    final String currentRange = rawRange == null ? '60days' : rawRange as String;
+    final isSelected = currentRange == range;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _chartRange = range;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.googleBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 11,
+          ),
+        ),
+      ),
+    );
+  }
+
   LineChartData _getMainChartData() {
     final today = DateTime.now();
-    final startDate = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 59));
+    
+    final dynamic rawRange = _chartRange;
+    final String range = rawRange == null ? '60days' : rawRange as String;
 
-    List<double> dailyIncome = List.filled(60, 0.0);
-    List<double> dailyExpenses = List.filled(60, 0.0);
+    DateTime startDate;
+    int daysCount;
+
+    if (range == 'currentMonth') {
+      startDate = DateTime(today.year, today.month, 1);
+      daysCount = DateTime(today.year, today.month + 1, 0).day;
+    } else {
+      startDate = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 59));
+      daysCount = 60;
+    }
+
+    List<double> dailyIncome = List.filled(daysCount, 0.0);
+    List<double> dailyExpenses = List.filled(daysCount, 0.0);
 
     // Use dynamic to satisfy the analyzer while maintaining runtime safety during web hot reload
     final dynamic rawTxList = _chartTransactions;
@@ -462,7 +540,7 @@ class DashboardPageState extends State<DashboardPage> {
       final txNormalized = DateTime(tx.date.year, tx.date.month, tx.date.day);
       final dayIndex = txNormalized.difference(startDate).inDays;
 
-      if (dayIndex >= 0 && dayIndex < 60) {
+      if (dayIndex >= 0 && dayIndex < daysCount) {
         if (account.type == 'checking') {
           if (tx.categoryType == 'income' || tx.categoryType == 'reimbursement' || (tx.amount > 0 && tx.categoryType != 'transfer')) {
             dailyIncome[dayIndex] += tx.amount;
@@ -475,8 +553,8 @@ class DashboardPageState extends State<DashboardPage> {
       }
     }
 
-    List<double> incomePoints = List.filled(60, 0.0);
-    List<double> expensePoints = List.filled(60, 0.0);
+    List<double> incomePoints = List.filled(daysCount, 0.0);
+    List<double> expensePoints = List.filled(daysCount, 0.0);
 
     // Use dynamic to satisfy the analyzer while maintaining runtime safety during web hot reload
     final dynamic rawMode = _chartMode;
@@ -484,7 +562,7 @@ class DashboardPageState extends State<DashboardPage> {
     if (mode == 'cumulative') {
       double runningIncome = 0.0;
       double runningExpense = 0.0;
-      for (int i = 0; i < 60; i++) {
+      for (int i = 0; i < daysCount; i++) {
         runningIncome += dailyIncome[i];
         runningExpense += dailyExpenses[i];
         incomePoints[i] = runningIncome;
@@ -498,7 +576,7 @@ class DashboardPageState extends State<DashboardPage> {
     List<FlSpot> incomeSpots = [];
     List<FlSpot> expenseSpots = [];
 
-    for (int i = 0; i < 60; i++) {
+    for (int i = 0; i < daysCount; i++) {
       incomeSpots.add(FlSpot(i.toDouble(), incomePoints[i]));
       expenseSpots.add(FlSpot(i.toDouble(), expensePoints[i]));
     }
@@ -586,8 +664,15 @@ class DashboardPageState extends State<DashboardPage> {
             interval: 1,
             getTitlesWidget: (value, meta) {
               final int dayIndex = value.toInt();
-              if (dayIndex >= 0 && dayIndex < 60) {
-                if (dayIndex == 0 || dayIndex == 15 || dayIndex == 30 || dayIndex == 45 || dayIndex == 59) {
+              if (dayIndex >= 0 && dayIndex < daysCount) {
+                bool shouldShow = false;
+                if (daysCount == 60) {
+                  shouldShow = (dayIndex == 0 || dayIndex == 15 || dayIndex == 30 || dayIndex == 45 || dayIndex == 59);
+                } else {
+                  shouldShow = (dayIndex == 0 || dayIndex == 9 || dayIndex == 19 || dayIndex == daysCount - 1);
+                }
+
+                if (shouldShow) {
                   final date = startDate.add(Duration(days: dayIndex));
                   return SideTitleWidget(
                     meta: meta,
@@ -638,7 +723,7 @@ class DashboardPageState extends State<DashboardPage> {
         show: false,
       ),
       minX: 0,
-      maxX: 59,
+      maxX: (daysCount - 1).toDouble(),
       minY: 0,
       maxY: maxY,
       lineBarsData: [
