@@ -103,6 +103,24 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       ),
     ];
 
+    final List<SidebarDestination> sidebarDestinations = const [
+      SidebarDestination(
+        icon: Icons.dashboard_outlined,
+        selectedIcon: Icons.dashboard,
+        label: 'Dashboard',
+      ),
+      SidebarDestination(
+        icon: Icons.account_balance_wallet_outlined,
+        selectedIcon: Icons.account_balance_wallet,
+        label: 'Accounts',
+      ),
+      SidebarDestination(
+        icon: Icons.swap_horiz_outlined,
+        selectedIcon: Icons.swap_horiz,
+        label: 'Transactions',
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: isDesktop
@@ -117,7 +135,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                   Text(
                     'BAREN BUDGET',
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: AppColors.limeMoss,
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
                     ),
@@ -145,85 +163,82 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
           Row(
             children: [
               if (isDesktop) ...[
-                // Desktop Sidebar Navigation Rail
+                // Desktop Sidebar Custom Navigation Rail
                 Container(
+                  width: _isRailExpanded ? 240 : 72,
                   color: AppColors.background,
                   child: Column(
                     children: [
-                      Expanded(
-                        child: NavigationRail(
-                          extended: _isRailExpanded,
-                          backgroundColor: AppColors.background,
-                          selectedIndex: _selectedIndex,
-                          minWidth: 72,
-                          onDestinationSelected: (int index) {
-                            setState(() {
-                              _selectedIndex = index;
-                            });
-                          },
-                          leading: SizedBox(
-                            width: _isRailExpanded ? 240 : 72,
-                            child: _isRailExpanded
-                                ? Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.account_balance_wallet, color: AppColors.limeMoss, size: 24),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'BAREN BUDGET',
-                                              style: theme.textTheme.titleMedium?.copyWith(
-                                                color: AppColors.limeMoss,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 1.0,
-                                              ),
-                                            ),
-                                          ],
+                      // Sidebar Header
+                      _isRailExpanded
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.account_balance_wallet, color: AppColors.limeMoss, size: 24),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'BAREN BUDGET',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.0,
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.menu_open, color: AppColors.limeMoss),
-                                          onPressed: () {
-                                            setState(() {
-                                              _isRailExpanded = false;
-                                            });
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                                    child: Center(
-                                      child: IconButton(
-                                        icon: const Icon(Icons.menu, color: AppColors.limeMoss),
-                                        onPressed: () {
-                                          setState(() {
-                                            _isRailExpanded = true;
-                                          });
-                                        },
                                       ),
-                                    ),
+                                    ],
                                   ),
-                          ),
-                          destinations: destinations.map((d) {
-                            return NavigationRailDestination(
-                              icon: d.icon,
-                              selectedIcon: d.selectedIcon,
-                              label: Text(
-                                d.label,
-                                style: const TextStyle(color: Colors.white),
+                                  IconButton(
+                                    icon: const Icon(Icons.menu_open, color: Colors.white),
+                                    onPressed: () {
+                                      setState(() {
+                                        _isRailExpanded = false;
+                                      });
+                                    },
+                                  ),
+                                ],
                               ),
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16.0),
+                              child: Center(
+                                child: IconButton(
+                                  icon: const Icon(Icons.menu, color: Colors.white),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isRailExpanded = true;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 8),
+                      // Navigation Destinations
+                      Expanded(
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: sidebarDestinations.length,
+                          itemBuilder: (context, index) {
+                            final dest = sidebarDestinations[index];
+                            return SidebarItem(
+                              icon: dest.icon,
+                              selectedIcon: dest.selectedIcon,
+                              label: dest.label,
+                              isSelected: _selectedIndex == index,
+                              isExpanded: _isRailExpanded,
+                              onTap: () {
+                                setState(() {
+                                  _selectedIndex = index;
+                                });
+                              },
                             );
-                          }).toList(),
-                          selectedIconTheme: const IconThemeData(color: AppColors.limeMoss),
-                          unselectedIconTheme: const IconThemeData(color: Colors.white70),
-                          labelType: NavigationRailLabelType.none,
+                          },
                         ),
                       ),
+                      // Footer Actions
                       Container(
                         width: _isRailExpanded ? 240 : 72,
                         padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -411,6 +426,105 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         onSaved: () {
           _triggerRefresh();
         },
+      ),
+    );
+  }
+}
+
+class SidebarDestination {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+
+  const SidebarDestination({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
+}
+
+class SidebarItem extends StatefulWidget {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool isSelected;
+  final bool isExpanded;
+  final VoidCallback onTap;
+
+  const SidebarItem({
+    super.key,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.isSelected,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
+  @override
+  State<SidebarItem> createState() => _SidebarItemState();
+}
+
+class _SidebarItemState extends State<SidebarItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    Color? backgroundColor;
+    if (_isHovered) {
+      backgroundColor = const Color(0xFF1F1F1F); // Lighter grey than background (0xFF030303)
+    } else if (widget.isSelected) {
+      backgroundColor = const Color(0xFF000000); // Darker than background (0xFF030303)
+    } else {
+      backgroundColor = Colors.transparent;
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+          padding: widget.isExpanded
+              ? const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0)
+              : const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: widget.isExpanded
+              ? Row(
+                  children: [
+                    Icon(
+                      widget.isSelected ? widget.selectedIcon : widget.icon,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                )
+              : Center(
+                  child: Icon(
+                    widget.isSelected ? widget.selectedIcon : widget.icon,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+        ),
       ),
     );
   }
