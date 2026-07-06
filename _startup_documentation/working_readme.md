@@ -123,3 +123,10 @@ The four summary cards at the top of the Dashboard are structured as follows:
     *   The state variables `_chartTransactions`, `_chartMode`, and `_chartRange` are cast to `dynamic` inside `_getMainChartData()` to prevent JavaScript runtime crashes (`TypeError: this[_chartTransactions] is not iterable`) during Flutter Web hot reloads.
 *   **Dynamic Chart Formatting**:
     *   The Y-axis maximum bounds (`maxY`), grid line spacing, and labels are computed dynamically depending on the maximum data point value to ensure visual scaling across any range of values.
+
+### 6. Category Expenses Donut Chart
+*   **Ongoing Month Focus**: Only aggregates and displays expenses within the ongoing (current) calendar month (from the 1st day of the current month to the current moment).
+*   **Parent-Child Category Aggregation**: Automatically groups any transaction linked to a subcategory (a category with a non-null/non-empty `parentId`) under its corresponding parent category. Transactions linked directly to a parent category or a category without a parent are grouped under themselves.
+*   **Upscaled Donut Layout**: Rendered in a large (280x280) layout using `PieChart` from `fl_chart`. It features a clean, minimal design without text overlays on segments, displaying a total expense summary at the center.
+*   **Dual Hover & Focus Highlight**: Hovering over a donut chart segment highlights that segment and visualizes a hover state on the category item in the legend list. Hovering over a legend item highlights that item and highlights the corresponding donut segment in the chart.
+*   **Harmonious Color Palette**: Segment colors are resolved dynamically from the category's `colorHex` field, with a pre-defined premium fallback palette.

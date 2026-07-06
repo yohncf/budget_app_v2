@@ -18,6 +18,7 @@ class DashboardPageState extends State<DashboardPage> {
   
   List<Account> _accounts = [];
   List<Transaction> _transactions = [];
+  List<Category> _categories = [];
 
   // Holds transaction history fetched from the database for the chart window (max 60 days).
   List<Transaction> _chartTransactions = [];
@@ -44,6 +45,7 @@ class DashboardPageState extends State<DashboardPage> {
     try {
       final accounts = await _databaseService.fetchAccounts();
       final transactions = await _databaseService.fetchTransactions(limit: 30, offset: 0);
+      final categories = await _databaseService.fetchCategories();
       
       final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
       final chartTransactions = await _databaseService.fetchTransactions(
@@ -56,6 +58,7 @@ class DashboardPageState extends State<DashboardPage> {
         _accounts = accounts.where((acc) => acc.status != 'archived').toList();
         _transactions = transactions;
         _chartTransactions = chartTransactions;
+        _categories = categories;
       });
     } catch (e) {
       print('Error loading dashboard data: $e');
@@ -315,6 +318,12 @@ class DashboardPageState extends State<DashboardPage> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 32),
+            CategoryExpenseChartCard(
+              chartTransactions: _chartTransactions,
+              categories: _categories,
+              chartRange: _chartRange,
             ),
             const SizedBox(height: 32),
 
@@ -893,6 +902,322 @@ class _HoverSummaryCardState extends State<HoverSummaryCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class CategoryExpenseSegment {
+  final Category category;
+  final double amount;
+  final Color color;
+
+  CategoryExpenseSegment({
+    required this.category,
+    required this.amount,
+    required this.color,
+  });
+}
+
+class CategoryExpenseChartCard extends StatefulWidget {
+  final List<Transaction> chartTransactions;
+  final List<Category> categories;
+  final String chartRange;
+
+  const CategoryExpenseChartCard({
+    super.key,
+    required this.chartTransactions,
+    required this.categories,
+    required this.chartRange,
+  });
+
+  @override
+  State<CategoryExpenseChartCard> createState() => _CategoryExpenseChartCardState();
+}
+
+class _CategoryExpenseChartCardState extends State<CategoryExpenseChartCard> {
+  int _touchedIndex = -1;
+
+  static const List<Color> _defaultPalette = [
+    Color(0xFF7DAC20), // Lime Moss
+    Color(0xFF9272BF), // Lavender Purple
+    Color(0xFF4285F4), // Google Blue
+    Color(0xFFEE4D44), // Cinnabar
+    Color(0xFFF4B400), // Yellow
+    Color(0xFF0F9D58), // Green
+    Color(0xFF00ACC1), // Cyan
+    Color(0xFFD81B60), // Pink
+    Color(0xFF8E24AA), // Purple
+    Color(0xFFF4511E), // Orange
+    Color(0xFF3949AB), // Indigo
+    Color(0xFFC0CA33), // Lime
+    Color(0xFF00897B), // Teal
+  ];
+
+  Color _getCategoryColor(Category category, int index) {
+    if (category.colorHex != null && category.colorHex!.isNotEmpty) {
+      try {
+        String hex = category.colorHex!.replaceAll('#', '');
+        if (hex.length == 6) {
+          hex = 'FF$hex';
+        }
+        return Color(int.parse(hex, radix: 16));
+      } catch (_) {}
+    }
+    return _defaultPalette[index % _defaultPalette.length];
+  }
+
+  String _formatCurrency(double amount) {
+    return NumberFormat.currency(locale: 'en_US', symbol: '\$').format(amount);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Filter to ongoing (current) calendar month
+    final today = DateTime.now();
+    final startDate = DateTime(today.year, today.month, 1);
+
+    // Group and aggregate expenses
+    final categoryMap = {for (var c in widget.categories) c.id: c};
+    final Map<String, double> categorySums = {}; // key: category.id
+
+    // Use dynamic cast to handle hot reload cases safely
+    final dynamic rawTxList = widget.chartTransactions;
+    final List<Transaction> txList = rawTxList == null ? <Transaction>[] : List<Transaction>.from(rawTxList as Iterable);
+
+    for (final tx in txList) {
+      if (tx.date.isBefore(startDate)) continue;
+
+      // Check if transaction is an expense
+      final isExpense = tx.categoryType == 'expense' ||
+          tx.categoryType == 'tax' ||
+          (tx.amount < 0 && tx.categoryType != 'transfer');
+      if (!isExpense) continue;
+
+      Category? cat = categoryMap[tx.categoryId];
+      if (cat == null) continue;
+
+      Category targetCat = cat;
+      // Aggregate subcategory under parent category
+      if (cat.parentId != null && cat.parentId!.isNotEmpty) {
+        final parent = categoryMap[cat.parentId!];
+        if (parent != null) {
+          targetCat = parent;
+        }
+      }
+
+      final amount = tx.amount.abs();
+      categorySums[targetCat.id] = (categorySums[targetCat.id] ?? 0.0) + amount;
+    }
+
+    int index = 0;
+    final segments = categorySums.entries.map((entry) {
+      final cat = categoryMap[entry.key]!;
+      final color = _getCategoryColor(cat, index++);
+      return CategoryExpenseSegment(
+        category: cat,
+        amount: entry.value,
+        color: color,
+      );
+    }).toList();
+
+    // Sort segments descending by amount
+    segments.sort((a, b) => b.amount.compareTo(a.amount));
+
+    final totalSum = segments.fold(0.0, (sum, item) => sum + item.amount);
+    const subtitle = 'Expense Distribution (Current Month)';
+
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24.0),
+        border: Border.all(color: Colors.transparent, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Category Expenses',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white54,
+            ),
+          ),
+          const SizedBox(height: 32),
+          if (totalSum == 0)
+            const SizedBox(
+              height: 280,
+              child: Center(
+                child: Text(
+                  'No expenses recorded in this period.',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 600;
+
+                final chartWidget = SizedBox(
+                  height: 280,
+                  width: 280,
+                  child: Stack(
+                    children: [
+                      PieChart(
+                        PieChartData(
+                          pieTouchData: PieTouchData(
+                            touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                              setState(() {
+                                if (!event.isInterestedForInteractions ||
+                                    pieTouchResponse == null ||
+                                    pieTouchResponse.touchedSection == null) {
+                                  _touchedIndex = -1;
+                                  return;
+                                }
+                                _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                              });
+                            },
+                          ),
+                          borderData: FlBorderData(show: false),
+                          sectionsSpace: 3,
+                          centerSpaceRadius: 85,
+                          sections: List.generate(segments.length, (i) {
+                            final isTouched = i == _touchedIndex;
+                            final segment = segments[i];
+                            final radius = isTouched ? 34.0 : 24.0;
+                            return PieChartSectionData(
+                              color: segment.color,
+                              value: segment.amount,
+                              title: '',
+                              radius: radius,
+                            );
+                          }),
+                        ),
+                      ),
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'TOTAL',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _formatCurrency(totalSum),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                final legendWidget = ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: segments.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final segment = segments[index];
+                    final percent = (segment.amount / totalSum) * 100;
+                    final isTouched = index == _touchedIndex;
+
+                    return MouseRegion(
+                      onEnter: (_) => setState(() => _touchedIndex = index),
+                      onExit: (_) => setState(() => _touchedIndex = -1),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isTouched ? Colors.white.withOpacity(0.04) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: segment.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                  segment.category.name,
+                                  style: TextStyle(
+                                    color: isTouched ? Colors.white : Colors.white.withOpacity(0.9),
+                                    fontWeight: isTouched ? FontWeight.bold : FontWeight.w500,
+                                    fontSize: 14,
+                                  ),
+                              ),
+                            ),
+                            Text(
+                              '${percent.toStringAsFixed(1)}%',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              _formatCurrency(segment.amount),
+                              style: TextStyle(
+                                color: isTouched ? AppColors.limeMoss : Colors.white70,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+
+                if (isWide) {
+                  return Row(
+                    children: [
+                      Expanded(child: Center(child: chartWidget)),
+                      const SizedBox(width: 32),
+                      Expanded(child: legendWidget),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      Center(child: chartWidget),
+                      const SizedBox(height: 32),
+                      legendWidget,
+                    ],
+                  );
+                }
+              },
+            ),
+        ],
       ),
     );
   }
