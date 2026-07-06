@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -17,6 +18,8 @@ class DashboardPageState extends State<DashboardPage> {
   
   List<Account> _accounts = [];
   List<Transaction> _transactions = [];
+  List<Transaction> _chartTransactions = [];
+  String _chartMode = 'cumulative'; // 'cumulative' or 'daily'
   bool _isLoading = true;
   bool _showHoldingInChecking = false;
 
@@ -33,9 +36,18 @@ class DashboardPageState extends State<DashboardPage> {
     try {
       final accounts = await _databaseService.fetchAccounts();
       final transactions = await _databaseService.fetchTransactions(limit: 30, offset: 0);
+      
+      final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
+      final chartTransactions = await _databaseService.fetchTransactions(
+        startDate: sixtyDaysAgo,
+        limit: 1000,
+        offset: 0,
+      );
+
       setState(() {
         _accounts = accounts.where((acc) => acc.status != 'archived').toList();
         _transactions = transactions;
+        _chartTransactions = chartTransactions;
       });
     } catch (e) {
       print('Error loading dashboard data: $e');
@@ -208,10 +220,10 @@ class DashboardPageState extends State<DashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 600;
+                      final titleColumn = Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
@@ -223,22 +235,50 @@ class DashboardPageState extends State<DashboardPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Monthly comparison of Income vs Expenses',
+                            'Checking Income vs Credit Card Expenses (Last 60 Days)',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: Colors.white54,
                             ),
                           ),
                         ],
-                      ),
-                      // Legend Row
-                      Row(
+                      );
+
+                      final controlsRow = Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          _buildLegendIndicator('Income', AppColors.limeMoss),
+                          _buildToggle(),
                           const SizedBox(width: 16),
-                          _buildLegendIndicator('Expenses', AppColors.lavenderPurple),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLegendIndicator('Checking Income', AppColors.limeMoss),
+                              const SizedBox(height: 6),
+                              _buildLegendIndicator('CC Expenses', AppColors.lavenderPurple),
+                            ],
+                          ),
                         ],
-                      )
-                    ],
+                      );
+
+                      if (isWide) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: titleColumn),
+                            const SizedBox(width: 16),
+                            controlsRow,
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            titleColumn,
+                            const SizedBox(height: 16),
+                            controlsRow,
+                          ],
+                        );
+                      }
+                    },
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
@@ -326,6 +366,7 @@ class DashboardPageState extends State<DashboardPage> {
 
   Widget _buildLegendIndicator(String label, Color color) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
@@ -344,18 +385,191 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(4.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleOption('cumulative', 'Cumulative'),
+          _buildToggleOption('daily', 'Daily'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleOption(String mode, String label) {
+    final isSelected = _chartMode == mode;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _chartMode = mode;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.limeMoss : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white70,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
   LineChartData _getMainChartData() {
+    final today = DateTime.now();
+    final startDate = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 59));
+
+    List<double> dailyIncome = List.filled(60, 0.0);
+    List<double> dailyExpenses = List.filled(60, 0.0);
+
+    // Use dynamic to satisfy the analyzer while maintaining runtime safety during web hot reload
+    final dynamic rawTxList = _chartTransactions;
+    final List<Transaction> txList = rawTxList == null ? <Transaction>[] : List<Transaction>.from(rawTxList as Iterable);
+    for (final tx in txList) {
+      final account = _accounts.firstWhere(
+        (a) => a.id == tx.accountId,
+        orElse: () => Account(
+          id: '',
+          name: '',
+          type: '',
+          institution: '',
+          currency: '',
+          currentBalance: 0,
+          limit: 0,
+          accountGroup: '',
+          status: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      if (account.id.isEmpty) continue;
+
+      final txNormalized = DateTime(tx.date.year, tx.date.month, tx.date.day);
+      final dayIndex = txNormalized.difference(startDate).inDays;
+
+      if (dayIndex >= 0 && dayIndex < 60) {
+        if (account.type == 'checking') {
+          if (tx.categoryType == 'income' || tx.categoryType == 'reimbursement' || (tx.amount > 0 && tx.categoryType != 'transfer')) {
+            dailyIncome[dayIndex] += tx.amount;
+          }
+        } else if (account.type == 'credit_card') {
+          if (tx.categoryType == 'expense' || tx.categoryType == 'tax' || (tx.amount < 0 && tx.categoryType != 'transfer')) {
+            dailyExpenses[dayIndex] += tx.amount.abs();
+          }
+        }
+      }
+    }
+
+    List<double> incomePoints = List.filled(60, 0.0);
+    List<double> expensePoints = List.filled(60, 0.0);
+
+    // Use dynamic to satisfy the analyzer while maintaining runtime safety during web hot reload
+    final dynamic rawMode = _chartMode;
+    final String mode = rawMode == null ? 'cumulative' : rawMode as String;
+    if (mode == 'cumulative') {
+      double runningIncome = 0.0;
+      double runningExpense = 0.0;
+      for (int i = 0; i < 60; i++) {
+        runningIncome += dailyIncome[i];
+        runningExpense += dailyExpenses[i];
+        incomePoints[i] = runningIncome;
+        expensePoints[i] = runningExpense;
+      }
+    } else {
+      incomePoints = dailyIncome;
+      expensePoints = dailyExpenses;
+    }
+
+    List<FlSpot> incomeSpots = [];
+    List<FlSpot> expenseSpots = [];
+
+    for (int i = 0; i < 60; i++) {
+      incomeSpots.add(FlSpot(i.toDouble(), incomePoints[i]));
+      expenseSpots.add(FlSpot(i.toDouble(), expensePoints[i]));
+    }
+
+    double maxIncome = incomePoints.isEmpty ? 0.0 : incomePoints.reduce(math.max);
+    double maxExpense = expensePoints.isEmpty ? 0.0 : expensePoints.reduce(math.max);
+    double maxVal = math.max(maxIncome, maxExpense);
+    if (maxVal < 100) maxVal = 100;
+
+    double maxY;
+    if (maxVal > 10000) {
+      maxY = (maxVal / 5000).ceil() * 5000.0;
+    } else if (maxVal > 2000) {
+      maxY = (maxVal / 1000).ceil() * 1000.0;
+    } else if (maxVal > 500) {
+      maxY = (maxVal / 500).ceil() * 500.0;
+    } else {
+      maxY = (maxVal / 100).ceil() * 100.0;
+    }
+
+    double interval = maxY / 4;
+    if (interval < 1) interval = 1;
+
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: 1000,
+        horizontalInterval: interval,
         getDrawingHorizontalLine: (value) {
           return const FlLine(
             color: Colors.white10,
             strokeWidth: 1,
           );
         },
+      ),
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipColor: (touchedSpot) => AppColors.card,
+          tooltipBorder: const BorderSide(color: Colors.white12, width: 1),
+          tooltipBorderRadius: const BorderRadius.all(Radius.circular(8)),
+          getTooltipItems: (List<LineBarSpot> touchedSpots) {
+            return touchedSpots.map((barSpot) {
+              final isIncome = barSpot.barIndex == 0;
+              final dayIndex = barSpot.x.toInt();
+              final date = startDate.add(Duration(days: dayIndex));
+              final dateStr = DateFormat('MMM dd').format(date);
+              final valStr = _formatCurrency(barSpot.y);
+              final prefix = barSpot == touchedSpots.first ? '$dateStr\n' : '';
+              
+              if (isIncome) {
+                return LineTooltipItem(
+                  '${prefix}Income: $valStr',
+                  const TextStyle(
+                    color: AppColors.limeMoss,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                );
+              } else {
+                return LineTooltipItem(
+                  '${prefix}Expenses: $valStr',
+                  const TextStyle(
+                    color: AppColors.lavenderPurple,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                );
+              }
+            }).toList();
+          },
+        ),
       ),
       titlesData: FlTitlesData(
         show: true,
@@ -371,47 +585,52 @@ class DashboardPageState extends State<DashboardPage> {
             reservedSize: 30,
             interval: 1,
             getTitlesWidget: (value, meta) {
-              String text = '';
-              switch (value.toInt()) {
-                case 1:
-                  text = 'Jan';
-                  break;
-                case 3:
-                  text = 'Mar';
-                  break;
-                case 5:
-                  text = 'May';
-                  break;
-                case 7:
-                  text = 'Jul';
-                  break;
-                case 9:
-                  text = 'Sep';
-                  break;
-                case 11:
-                  text = 'Nov';
-                  break;
+              final int dayIndex = value.toInt();
+              if (dayIndex >= 0 && dayIndex < 60) {
+                if (dayIndex == 0 || dayIndex == 15 || dayIndex == 30 || dayIndex == 45 || dayIndex == 59) {
+                  final date = startDate.add(Duration(days: dayIndex));
+                  return SideTitleWidget(
+                    meta: meta,
+                    space: 8,
+                    child: Text(
+                      DateFormat('MM/dd').format(date),
+                      style: const TextStyle(color: Colors.white54, fontSize: 10),
+                    ),
+                  );
+                }
               }
-              return SideTitleWidget(
-                meta: meta,
-                space: 8,
-                child: Text(text, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-              );
+              return const SizedBox.shrink();
             },
           ),
         ),
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: 1000,
+            interval: interval,
             getTitlesWidget: (value, meta) {
-              return Text(
-                '\$${(value.toInt() ~/ 1000)}k',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-                textAlign: TextAlign.left,
+              if (value < 0 || value > maxY) return const SizedBox.shrink();
+              String text;
+              if (value >= 1000) {
+                final kVal = value / 1000;
+                if (kVal == kVal.toInt()) {
+                  text = '\$${kVal.toInt()}k';
+                } else {
+                  text = '\$${kVal.toStringAsFixed(1)}k';
+                }
+              } else {
+                text = '\$${value.toInt()}';
+              }
+              return SideTitleWidget(
+                meta: meta,
+                space: 8,
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  textAlign: TextAlign.left,
+                ),
               );
             },
-            reservedSize: 42,
+            reservedSize: 48,
           ),
         ),
       ),
@@ -419,48 +638,32 @@ class DashboardPageState extends State<DashboardPage> {
         show: false,
       ),
       minX: 0,
-      maxX: 11,
+      maxX: 59,
       minY: 0,
-      maxY: 4000,
+      maxY: maxY,
       lineBarsData: [
-        // Income Line (Green)
         LineChartBarData(
-          spots: const [
-            FlSpot(0, 2000),
-            FlSpot(2, 2300),
-            FlSpot(4, 2500),
-            FlSpot(6, 2500),
-            FlSpot(8, 2700),
-            FlSpot(10, 3100),
-            FlSpot(11, 3500),
-          ],
+          spots: incomeSpots,
           isCurved: true,
-          color: AppColors.limeMoss, // Lime Moss #7DAC20
-          barWidth: 4,
+          color: AppColors.limeMoss,
+          barWidth: 3.5,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
           belowBarData: BarAreaData(
-            show: false,
+            show: true,
+            color: AppColors.limeMoss.withOpacity(0.08),
           ),
         ),
-        // Expenses Line (Lavender purple #4285F4)
         LineChartBarData(
-          spots: const [
-            FlSpot(0, 1500),
-            FlSpot(2, 1800),
-            FlSpot(4, 1400),
-            FlSpot(6, 1900),
-            FlSpot(8, 2100),
-            FlSpot(10, 2300),
-            FlSpot(11, 2000),
-          ],
+          spots: expenseSpots,
           isCurved: true,
-          color: AppColors.lavenderPurple, // Lavender purple #4285F4
-          barWidth: 4,
+          color: AppColors.lavenderPurple,
+          barWidth: 3.5,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
           belowBarData: BarAreaData(
-            show: false,
+            show: true,
+            color: AppColors.lavenderPurple.withOpacity(0.08),
           ),
         ),
       ],
