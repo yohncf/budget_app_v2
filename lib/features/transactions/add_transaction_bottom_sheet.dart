@@ -64,6 +64,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isRecurring = false;
+  String? _recurringId;
   bool _isFirstLoad = true;
 
   // For Edit Mode
@@ -83,6 +84,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
       _descriptionController.text = widget.transaction!.description ?? '';
       _accountId = widget.transaction!.accountId;
       _isRecurring = widget.transaction!.isRecurring;
+      _recurringId = widget.transaction!.recurringId;
     } else {
       _currency = 'MXN'; // Default currency
     }
@@ -112,6 +114,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
         } else {
           _categoryId = null;
           _isRecurring = false;
+          _recurringId = null;
         }
       });
     });
@@ -332,11 +335,21 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
   void _checkIfRecurring() {
     if (_categoryId == null) {
       _isRecurring = false;
+      _recurringId = null;
       return;
     }
-    final match = _recurringBudgets.any((r) => r['category_id'] == _categoryId);
+    final match = _recurringBudgets.firstWhere(
+      (r) => r['category_id'] == _categoryId,
+      orElse: () => <String, dynamic>{},
+    );
     setState(() {
-      _isRecurring = match;
+      if (match.isNotEmpty) {
+        _isRecurring = true;
+        _recurringId = match['id'] as String?;
+      } else {
+        _isRecurring = false;
+        _recurringId = null;
+      }
     });
   }
 
@@ -390,7 +403,22 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     return buffer.toString();
   }
 
-  Future<void> _submit() async {
+  void _clearFields() {
+    setState(() {
+      _amountController.clear();
+      _descriptionController.clear();
+      _categoryId = null;
+      _categorySearchController.clear();
+      _isRecurring = false;
+      _recurringId = null;
+      if (_tabController.index == 2) {
+        _destAccountId = null;
+        _destAccountSearchController.clear();
+      }
+    });
+  }
+
+  Future<void> _submit({bool closeSheet = true}) async {
     if (!_formKey.currentState!.validate()) return;
     if (_accountId == null) return;
 
@@ -442,6 +470,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
           status: widget.transaction?.status ?? 'cleared',
           isRecurring: _isRecurring,
+          recurringId: _recurringId,
           tags: pairTag,
           createdAt: widget.transaction?.createdAt ?? DateTime.now(),
         );
@@ -459,6 +488,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
           status: widget.transaction?.status ?? 'cleared',
           isRecurring: _isRecurring,
+          recurringId: _recurringId,
           tags: pairTag,
           createdAt: widget.transaction?.createdAt ?? DateTime.now(),
         );
@@ -497,6 +527,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
           status: widget.transaction?.status ?? 'cleared',
           isRecurring: _isRecurring,
+          recurringId: _recurringId,
           tags: widget.transaction?.tags,
           createdAt: widget.transaction?.createdAt ?? DateTime.now(),
         );
@@ -509,9 +540,20 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
       }
 
       widget.onSaved();
-      Navigator.of(context).pop();
+      if (closeSheet) {
+        Navigator.of(context).pop();
+      } else {
+        _clearFields();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Transaction saved successfully!'),
+            backgroundColor: AppColors.limeMoss,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
-      _showErrorDialog(e.toString().replaceFirst('Exception: ', ''));
+      _showErrorDialog(_getFriendlyErrorMessage(e.toString().replaceFirst('Exception: ', '')));
     } finally {
       setState(() {
         _isSaving = false;
@@ -553,12 +595,19 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
       widget.onSaved();
       Navigator.of(context).pop();
     } catch (e) {
-      _showErrorDialog(e.toString().replaceFirst('Exception: ', ''));
+      _showErrorDialog(_getFriendlyErrorMessage(e.toString().replaceFirst('Exception: ', '')));
     } finally {
       setState(() {
         _isSaving = false;
       });
     }
+  }
+
+  String _getFriendlyErrorMessage(String rawMessage) {
+    if (rawMessage.contains('check_recurring_conditional') || rawMessage.contains('23514')) {
+      return 'This transaction is marked as recurring but is not properly linked to an active recurring budget. Please verify the category has a valid active recurring budget.';
+    }
+    return rawMessage;
   }
 
   void _showErrorDialog(String msg) {
@@ -1150,16 +1199,39 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
                                   side: const BorderSide(color: Colors.white24, width: 1.5),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
-                                child: const Text('Cancel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          if (!isEdit) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SizedBox(
+                                height: 54,
+                                child: OutlinedButton(
+                                  onPressed: _isSaving ? null : () => _submit(closeSheet: false),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: highlightColor,
+                                    side: BorderSide(color: highlightColor, width: 1.5),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  ),
+                                  child: _isSaving
+                                      ? const SizedBox(
+                                          width: 20, 
+                                          height: 20, 
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                        )
+                                      : const Text('Save & New', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 12),
                           Expanded(
                             child: SizedBox(
                               height: 54,
                               child: ElevatedButton(
-                                onPressed: _isSaving ? null : _submit,
+                                onPressed: _isSaving ? null : () => _submit(closeSheet: true),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: highlightColor,
                                   foregroundColor: Colors.black,
@@ -1172,7 +1244,7 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
                                         height: 20, 
                                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                                       )
-                                    : const Text('Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    : const Text('Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               ),
                             ),
                           ),
