@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
 
@@ -17,6 +18,7 @@ class DashboardPageState extends State<DashboardPage> {
   List<Account> _accounts = [];
   List<Transaction> _transactions = [];
   bool _isLoading = true;
+  bool _showHoldingInChecking = false;
 
   @override
   void initState() {
@@ -44,26 +46,66 @@ class DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  double get _totalNetWorth {
-    double total = 0.0;
-    for (var acc in _accounts) {
-      total += acc.currentBalance;
+  /// Formats a double amount into standard currency notation with commas: e.g., "$1,234,567.89".
+  String _formatCurrency(double amount) {
+    return NumberFormat.currency(locale: 'en_US', symbol: '\$').format(amount);
+  }
+
+  /// Determines the card title for the checking account summary, dynamically adding "+ Holding" if toggled.
+  /// This provides clear visual feedback to the user about which accounts are currently included in the total.
+  String get _checkingCardTitle => _showHoldingInChecking ? 'Checking + Holding' : 'Total Checking';
+
+  /// Calculates the total balance of all active accounts of type 'checking'.
+  /// 
+  /// NOTE: We explicitly exclude any account named 'Holding' (case-insensitive) by default.
+  /// This is because we want the card to show checking-only accounts initially, and ONLY
+  /// include the 'Holding' account balance when the user explicitly clicks the card to
+  /// toggle its state (`_showHoldingInChecking == true`).
+  double get _totalChecking {
+    double sum = _accounts
+        .where((acc) => acc.type == 'checking' && acc.name.toLowerCase() != 'holding')
+        .fold(0.0, (sum, acc) => sum + acc.currentBalance);
+
+    // If toggled, we find and add the balance of the 'Holding' account to the total.
+    if (_showHoldingInChecking) {
+      final holdingAcc = _accounts.firstWhere(
+        (acc) => acc.name.toLowerCase() == 'holding',
+        orElse: () => Account(
+          id: '',
+          name: '',
+          type: '',
+          institution: '',
+          currency: '',
+          currentBalance: 0.0,
+          limit: 0.0,
+          accountGroup: '',
+          status: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      sum += holdingAcc.currentBalance;
     }
-    return total;
+    return sum;
   }
 
-  double get _totalLiquidAssets {
+  /// Calculates the total balance of all active accounts of type 'credit_card'.
+  double get _totalCreditCard {
     return _accounts
-        .where((acc) => acc.accountGroup == 'liquid_assets')
+        .where((acc) => acc.type == 'credit_card')
         .fold(0.0, (sum, acc) => sum + acc.currentBalance);
   }
 
-  double get _totalCreditDebt {
-    return _accounts
-        .where((acc) => acc.accountGroup == 'credit')
-        .fold(0.0, (sum, acc) => sum + acc.currentBalance);
+  /// Calculates the difference between checking account totals and credit card totals.
+  /// 
+  /// NOTE: Because this getter references `_totalChecking`, it dynamically updates to
+  /// include or exclude the 'Holding' account's balance whenever Card 1 is clicked.
+  /// This satisfies the requirement that the third card uses Card 1's active value vs credit card total.
+  double get _checkingMinusCreditCard {
+    return _totalChecking - _totalCreditCard;
   }
 
+  /// Calculates the total balance of all active accounts in the 'retirement' account group.
   double get _totalRetirement {
     return _accounts
         .where((acc) => acc.accountGroup == 'retirement')
@@ -112,29 +154,40 @@ class DashboardPageState extends State<DashboardPage> {
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
-                  childAspectRatio: isWide ? 1.6 : 1.3,
+                  childAspectRatio: isWide ? 1.9 : 1.4,
                   children: [
+                    // Card 1: Sum of checking accounts (toggles to include 'Holding' account on tap)
                     HoverSummaryCard(
-                      title: 'Net Worth',
-                      value: '\$${_totalNetWorth.toStringAsFixed(2)}',
-                      icon: Icons.account_balance,
+                      title: _checkingCardTitle,
+                      value: _formatCurrency(_totalChecking),
+                      icon: Icons.account_balance_wallet,
                       color: AppColors.limeMoss, // Lime Moss #7DAC20
+                      onTap: () {
+                        setState(() {
+                          _showHoldingInChecking = !_showHoldingInChecking;
+                        });
+                      },
                     ),
+                    // Card 2: Sum of credit card accounts
                     HoverSummaryCard(
-                      title: 'Liquid Assets',
-                      value: '\$${_totalLiquidAssets.toStringAsFixed(2)}',
-                      icon: Icons.money,
-                      color: AppColors.limeMoss, // Lime Moss #7DAC20
-                    ),
-                    HoverSummaryCard(
-                      title: 'Credit Debt',
-                      value: '\$${_totalCreditDebt.toStringAsFixed(2)}',
+                      title: 'Credit Card Debt',
+                      value: _formatCurrency(_totalCreditCard),
                       icon: Icons.credit_card,
                       color: AppColors.cinnabar, // Cinnabar #CB2549
                     ),
+                    // Card 3: Checking minus credit card
+                    HoverSummaryCard(
+                      title: 'Net Checking vs Credit',
+                      value: _formatCurrency(_checkingMinusCreditCard),
+                      icon: Icons.balance,
+                      color: _checkingMinusCreditCard >= 0 
+                          ? AppColors.limeMoss 
+                          : AppColors.cinnabar, // Dynamically changes color based on positive/negative net worth
+                    ),
+                    // Card 4: Sum of retirement accounts
                     HoverSummaryCard(
                       title: 'Retirement Savings',
-                      value: '\$${_totalRetirement.toStringAsFixed(2)}',
+                      value: _formatCurrency(_totalRetirement),
                       icon: Icons.trending_up,
                       color: AppColors.googleBlue, // Google Blue #9272BF
                     ),
@@ -415,7 +468,7 @@ class DashboardPageState extends State<DashboardPage> {
   }
 }
 
-/// A premium, animated hover summary card widget.
+/// A premium, animated hover summary card widget conforming to Material 3 card specs.
 ///
 /// **Why it exists**: Animates scale, shadow, and borders when the mouse hovers
 /// over it, giving the dashboard a highly interactive and state-of-the-art SaaS feel.
@@ -424,6 +477,7 @@ class HoverSummaryCard extends StatefulWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const HoverSummaryCard({
     super.key,
@@ -431,6 +485,7 @@ class HoverSummaryCard extends StatefulWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
@@ -445,71 +500,89 @@ class _HoverSummaryCardState extends State<HoverSummaryCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        transform: _isHovered 
-            ? Matrix4.translationValues(0.0, -4.0, 0.0) 
-            : Matrix4.identity(),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _isHovered 
-                ? AppColors.limeMoss // Lime Moss #7DAC20 highlight on hover
-                : Colors.transparent,
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
+      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          transform: _isHovered 
+              ? Matrix4.translationValues(0.0, -4.0, 0.0) 
+              : Matrix4.identity(),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
               color: _isHovered 
-                  ? const Color(0x26C2FE0B) // 15% opacity Volt Green glow on hover
-                  : Colors.black.withOpacity(0.2),
-              blurRadius: _isHovered ? 12 : 6,
-              offset: const Offset(0, 4),
+                  ? AppColors.limeMoss // Lime Moss #7DAC20 highlight on hover
+                  : Colors.transparent,
+              width: 1.5,
             ),
-          ],
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Stack(
-          children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: Icon(
-                widget.icon,
-                color: widget.color.withOpacity(0.85),
-                size: 22,
+            boxShadow: [
+              BoxShadow(
+                color: _isHovered 
+                    ? const Color(0x26C2FE0B) // 15% opacity Volt Green glow on hover
+                    : Colors.black.withOpacity(0.2),
+                blurRadius: _isHovered ? 12 : 6,
+                offset: const Offset(0, 4),
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    widget.value,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0), // Margins upscaled to balance larger sizes
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header/Headline & Subhead text column on the left side
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, // Align text to the top-left corner
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title, // Shown as "Headline" text (visually bold & prominent) in the top-left corner
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18, // Upscaled from 16 to maximize legibility and presence
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.start,
                     ),
-                  ),
+                    const SizedBox(height: 6), // Adjusted gap to balance larger text elements
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.value, // Shown as "Subhead" text (less prominent format) just below the Headline
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16, // Upscaled from 14 to maximize readability
+                          fontWeight: FontWeight.w400,
+                        ),
+                        textAlign: TextAlign.start,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 12),
+              // Icon wrapped in a circle on the right side
+              Container(
+                width: 42, // Upscaled from 36 to match larger layout
+                height: 42, // Upscaled from 36 to match larger layout
+                decoration: const BoxDecoration(
+                  color: AppColors.background, // Circular badge matched to app canvas background
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  widget.icon,
+                  color: widget.color,
+                  size: 22, // Upscaled from 18 to match larger circle container
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

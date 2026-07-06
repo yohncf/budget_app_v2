@@ -48,3 +48,23 @@ A Floating Action Button (FAB) must be present in the layout:
   - **Add Account**
   - **Add Budget**
 - The menu must overlay a subtle background dimming layer to keep focus on the action choices.
+
+---
+
+## 5. Dashboard Financial Cards Design Guidelines
+
+The top metrics cards on the dashboard must be visually cohesive and conform to the following aesthetic rules:
+- **Card Styling & Interactions**: Use `HoverSummaryCard` widgets that support animated scaling (-4.0px translation on Y-axis) and border/glow adjustments upon mouse hover. If a card is clickable (e.g. checking card), it displays a pointer (`SystemMouseCursors.click`) cursor on web viewports. The card height is compact (configured via a taller `childAspectRatio: isWide ? 1.9 : 1.4` and `EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0)` inner padding).
+- **Material 3 Layout & Typography**:
+  - **Left Side**: The card name/title is positioned in the top-left corner styled as a prominent **Headline** (bold, `fontSize: 18` in `Colors.white`, left-aligned). The amount/value is positioned just below it styled as a **Subhead** (lighter weight, `fontSize: 16` in `Colors.white70`, left-aligned).
+  - **Right Side**: The icon is placed inside a circular container matching the app's main background canvas color (`AppColors.background`, `#030303`, upscaled to `42x42` size and `22` icon size), giving a clean cutout visual appearance against the card surface background (`#0E0E0E`).
+- **Color Coding & Status Indicators**:
+  - Positive asset values, totals, and non-negative net metrics use **Lime Moss** (`#7DAC20`) to symbolize healthy accounts.
+  - Liabilities, debts, and negative net metrics use **Cinnabar** (`#EE4D44`) to signal outstanding balances or negative statuses.
+  - Retirement metrics use **Google Blue** (`#4285F4`) (or its purple/blue accent variations) to distinguish them from liquid asset classes.
+- **Numeric Display Rules**:
+  - To maintain readability, all monetary figures on the summary cards must be presented with thousands separator commas and two decimal places, prefixed by the dollar sign (e.g. `"$1,234,567.89"` or `"$0.00"`).
+  - Use `package:intl/intl.dart` library's currency formatting options (`locale: 'en_US'`) to ensure standard output.
+
+
+

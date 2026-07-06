@@ -94,3 +94,20 @@ A transfer transaction consists of two linked database rows:
 *   **Color-coded Transfer Amounts**:
     *   To improve scan-ability, transaction items of type `transfer` render their amounts in **Google Blue** (`0xFF4285F4`), whereas other transactions are green (inflow) or red (outflow).
 
+---
+
+## 📊 Dashboard Page Metrics & Cards Logic
+
+The four summary cards at the top of the Dashboard are structured as follows:
+
+1.  **Total Checking**: Calculates and displays the total sum of all active accounts of type `"checking"` (excluding any account named `"Holding"` by default). Tapping the card toggles a state that adds the balance of the account named `"Holding"` to this sum, updating the card title dynamically to `"Checking + Holding"`. Tapping it again reverts it to the default.
+2.  **Credit Card Debt**: Calculates and displays the total sum of all active accounts of type `"credit_card"`.
+3.  **Net Checking vs Credit**: Calculates the net difference: `checking_sum - credit_card_sum`. It dynamically updates based on the toggled state of Card 1 (using `checking + holding` if active, or just `checking` if inactive) and highlights with **Lime Moss** (`0xFF7DAC20`) if the net balance is non-negative, and **Cinnabar** (`0xFFEE4D44`) if the net balance is negative.
+4.  **Retirement Savings**: Calculates and displays the total sum of all active accounts belonging to the `"retirement"` account group.
+
+### Formatting Specifications
+*   All numeric values displayed on the dashboard cards are formatted under the US locale standards with proper thousands separator commas and two decimal places (e.g., `"$1,234,567.89"` or `"$0.00"`).
+*   This uses the `intl` package's `NumberFormat.currency(locale: 'en_US', symbol: '\$')` standard.
+
+
+
