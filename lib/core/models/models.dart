@@ -146,6 +146,7 @@ class Transaction {
   // UI presentation helper properties (joined from DB)
   final String? accountName;
   final String? categoryName;
+  final String? categoryType;
 
   Transaction({
     required this.id,
@@ -164,6 +165,7 @@ class Transaction {
     required this.createdAt,
     this.accountName,
     this.categoryName,
+    this.categoryType,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -188,6 +190,7 @@ class Transaction {
       createdAt: DateTime.parse(json['created_at'] as String),
       accountName: accountData != null ? accountData['name'] as String? : json['account_name'] as String?,
       categoryName: categoryData != null ? categoryData['name'] as String? : json['category_name'] as String?,
+      categoryType: categoryData != null ? categoryData['type'] as String? : json['category_type'] as String?,
     );
   }
 

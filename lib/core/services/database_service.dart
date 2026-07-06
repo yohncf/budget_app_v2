@@ -53,26 +53,53 @@ class DatabaseService {
   }
 
   // --- TRANSACTIONS ---
+  /// Fetches transactions from the Supabase database.
+  /// Supports starting date constraint, text search queries (which can be a description, tag, or amount),
+  /// and filtering by category types (expense, income, transfer).
   Future<List<Transaction>> fetchTransactions({
     DateTime? startDate,
     String? query,
+    String? typeFilter,
     required int limit,
     required int offset,
   }) async {
     try {
+      // Fetch transactions with inner-joined categories to facilitate filtering on category type
       var queryBuilder = _client
           .from('transactions')
-          .select('*, accounts(name), categories(name)');
+          .select('*, accounts(name), categories!inner(name, type)');
 
+      // Apply date constraint if specified
       if (startDate != null) {
         queryBuilder = queryBuilder.gte('date', startDate.toIso8601String());
       }
+      
+      // Handle search queries (supports description, tags, and transaction amount)
       if (query != null && query.trim().isNotEmpty) {
         final q = query.trim();
-        // Supabase Postgres full text search or simple custom or filter
-        queryBuilder = queryBuilder.or('description.ilike.%$q%,tags.ilike.%$q%');
+        final numericVal = double.tryParse(q);
+        if (numericVal != null) {
+          // If query is numeric, search in description, tags, or matching positive/negative transaction amounts
+          final absVal = numericVal.abs();
+          queryBuilder = queryBuilder.or('description.ilike.%$q%,tags.ilike.%$q%,amount.eq.$absVal,amount.eq.-$absVal');
+        } else {
+          // If query is text, search in description or tags
+          queryBuilder = queryBuilder.or('description.ilike.%$q%,tags.ilike.%$q%');
+        }
       }
 
+      // Filter by category type based on chosen chip
+      if (typeFilter != null) {
+        if (typeFilter == 'expense') {
+          queryBuilder = queryBuilder.inFilter('categories.type', ['expense', 'tax']);
+        } else if (typeFilter == 'income') {
+          queryBuilder = queryBuilder.inFilter('categories.type', ['income', 'reimbursement']);
+        } else if (typeFilter == 'transfer') {
+          queryBuilder = queryBuilder.eq('categories.type', 'transfer');
+        }
+      }
+
+      // Execute paginated and ordered query
       final response = await queryBuilder
           .order('date', ascending: false)
           .range(offset, offset + limit - 1);

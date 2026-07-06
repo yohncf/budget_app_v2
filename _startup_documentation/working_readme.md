@@ -74,3 +74,23 @@ A transfer transaction consists of two linked database rows:
     *   Both Category suggestions and Account lists are sorted alphabetically during DB load.
 *   **Archived Account Filtering**:
     *   Accounts whose status attribute is `'archived'` are filtered out and completely omitted from select states.
+
+---
+
+## 🔍 Transactions Page Filtering, Search, & Styling
+
+*   **Search bar & Date Picker alignment**:
+    *   The Date Picker button has been repositioned to sit horizontally next to the search field in the app bar.
+    *   It displays the formatted date parameter dynamically (e.g., 'All Time' or 'Since: MMM dd').
+*   **Search by Amount**:
+    *   The search filter has been upgraded to scan for numeric amounts in addition to descriptions and tags.
+    *   If the search query parses as a valid double value, the Supabase query checks for absolute and negative matches against the database `amount` column (`amount.eq.$absVal` or `amount.eq.-$absVal`).
+*   **Transaction Type Choice Chips**:
+    *   Horizontal scrollable chips (`All`, `Expense`, `Income`, `Transfer`) are displayed just below the search field.
+    *   Selecting a chip filters the transaction list by matching category types (`expense`/`tax` for Expense, `income`/`reimbursement` for Income, and `transfer` for Transfer).
+*   **Unified Reset Logic (Clear Filters)**:
+    *   A white `Clear Filters` button is displayed dynamically when any filter is active.
+    *   Tapping it clears the search input, clears the type selection, and reverts the date back to the initial 15-day-ago default preset.
+*   **Color-coded Transfer Amounts**:
+    *   To improve scan-ability, transaction items of type `transfer` render their amounts in **Google Blue** (`0xFF4285F4`), whereas other transactions are green (inflow) or red (outflow).
+

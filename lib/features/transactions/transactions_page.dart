@@ -22,14 +22,24 @@ class TransactionsPageState extends State<TransactionsPage> {
   int _offset = 0;
   final int _limit = 30;
 
+  // Filters and search query state variables
   DateTime? _startDate;
+  DateTime? _presetDate; // Default preset date (15 days ago) to revert to on clearing filters
   String _searchQuery = '';
+  String? _selectedTypeFilter; // Tracks category type filter selection ('expense', 'income', 'transfer', or null)
+
+  /// Returns the default date preset of 15 days ago
+  DateTime _getDefaultPresetDate() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day).subtract(const Duration(days: 15));
+  }
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 15));
+    // Initialize filter date preset and start date
+    _presetDate = _getDefaultPresetDate();
+    _startDate = _presetDate;
     loadTransactions();
     _scrollController.addListener(_onScroll);
   }
@@ -41,6 +51,7 @@ class TransactionsPageState extends State<TransactionsPage> {
     super.dispose();
   }
 
+  /// Fetches transactions from backend using active filters (date range, query, type)
   Future<void> loadTransactions({bool reset = false}) async {
     if (_isLoading) return;
 
@@ -57,6 +68,7 @@ class TransactionsPageState extends State<TransactionsPage> {
       final list = await _databaseService.fetchTransactions(
         startDate: _startDate,
         query: _searchQuery.isEmpty ? null : _searchQuery,
+        typeFilter: _selectedTypeFilter,
         limit: _limit,
         offset: _offset,
       );
@@ -85,6 +97,7 @@ class TransactionsPageState extends State<TransactionsPage> {
     }
   }
 
+  /// Triggers a reset reload when the search term is updated
   void _onSearchChanged(String query) {
     setState(() {
       _searchQuery = query;
@@ -92,6 +105,7 @@ class TransactionsPageState extends State<TransactionsPage> {
     loadTransactions(reset: true);
   }
 
+  /// Opens the system date picker dialog with custom dark styling mapping to design guidelines
   Future<void> _selectStartDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -121,11 +135,51 @@ class TransactionsPageState extends State<TransactionsPage> {
     }
   }
 
-  void _clearDateFilter() {
+  /// Clears the search field, type filter, and reverts the start date back to the initial preset
+  void _clearAllFilters() {
     setState(() {
-      _startDate = null;
+      _searchController.clear();
+      _searchQuery = '';
+      _startDate = _presetDate;
+      _selectedTypeFilter = null;
     });
     loadTransactions(reset: true);
+  }
+
+  bool get _hasActiveFilters {
+    return _searchQuery.isNotEmpty || _startDate != _presetDate || _selectedTypeFilter != null;
+  }
+
+  Widget _buildTypeChip(String label, String? typeValue) {
+    final isSelected = _selectedTypeFilter == typeValue;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _selectedTypeFilter = typeValue;
+          });
+          loadTransactions(reset: true);
+        }
+      },
+      selectedColor: AppColors.limeMoss,
+      backgroundColor: AppColors.background,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.black : Colors.white,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        fontSize: 12,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isSelected ? AppColors.limeMoss : Colors.white10,
+          width: 1,
+        ),
+      ),
+      showCheckmark: false,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    );
   }
 
   void _editTransaction(Transaction tx) {
@@ -145,75 +199,110 @@ class TransactionsPageState extends State<TransactionsPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(130),
+        preferredSize: const Size.fromHeight(140),
         child: Container(
           color: AppColors.card,
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 12.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Search input
-              TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Search description, tags, amount, category...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: AppColors.limeMoss),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white54),
-                          onPressed: () {
-                            _searchController.clear();
-                            _onSearchChanged('');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppColors.background,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24.0),
-                    borderSide: BorderSide.none,
+              // Search input and Date Picker row
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search description, tags, amount, category...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(Icons.search, color: AppColors.limeMoss),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: Colors.white54),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _onSearchChanged('');
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: AppColors.background,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24.0),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  // Date picker next to search bar
+                  InkWell(
+                    onTap: _selectStartDate,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white10, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.date_range, size: 18, color: AppColors.limeMoss),
+                          const SizedBox(width: 8),
+                          Text(
+                            _startDate == null
+                                ? 'All Time'
+                                : DateFormat('MMM dd').format(_startDate!),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
 
-              // Filter row
+              // Chips & Clear Filters Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 16, color: AppColors.limeMoss),
-                      const SizedBox(width: 8),
-                      Text(
-                        _startDate == null
-                            ? 'All Transactions'
-                            : 'Since: ${DateFormat.yMMMd().format(_startDate!)}',
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildTypeChip('All', null),
+                          const SizedBox(width: 8),
+                          _buildTypeChip('Expense', 'expense'),
+                          const SizedBox(width: 8),
+                          _buildTypeChip('Income', 'income'),
+                          const SizedBox(width: 8),
+                          _buildTypeChip('Transfer', 'transfer'),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                  Row(
-                    children: [
-                      if (_startDate != null)
-                        TextButton.icon(
-                          onPressed: _clearDateFilter,
-                          icon: const Icon(Icons.filter_alt_off, size: 16, color: Color(0xFFFB9426)),
-                          label: const Text('Clear', style: TextStyle(color: Color(0xFFFB9426), fontSize: 13)),
-                        ),
-                      TextButton.icon(
-                        onPressed: _selectStartDate,
-                        icon: const Icon(Icons.date_range, size: 16, color: AppColors.limeMoss),
-                        label: const Text('Pick Date', style: TextStyle(color: AppColors.limeMoss, fontSize: 13)),
-                      ),
-                    ],
-                  )
+                  const SizedBox(width: 8),
+                  if (_hasActiveFilters)
+                    TextButton.icon(
+                      onPressed: _clearAllFilters,
+                      icon: const Icon(Icons.filter_alt_off, size: 16, color: Colors.white),
+                      label: const Text('Clear Filters', style: TextStyle(color: Colors.white, fontSize: 13)),
+                    ),
                 ],
-              )
+              ),
             ],
           ),
         ),
@@ -245,8 +334,13 @@ class TransactionsPageState extends State<TransactionsPage> {
                       );
                     }
 
+                    // Extract transaction model attributes
                     final tx = _transactions[index];
                     final isIncome = tx.amount > 0;
+                    
+                    // Check if the transaction represents a transfer (either by category type or tag prefix)
+                    final isTransfer = tx.categoryType == 'transfer' || 
+                        (tx.tags != null && tx.tags!.startsWith('transfer_pair:'));
 
                     return HoverTransactionCard(
                       isIncome: isIncome,
@@ -258,7 +352,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Row 1: Category Name & Amount
+                              // Row 1: Category Name & Amount (Color-coded)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -274,7 +368,11 @@ class TransactionsPageState extends State<TransactionsPage> {
                                   Text(
                                     '${isIncome ? "+" : ""}\$${tx.amount.toStringAsFixed(2)}',
                                     style: TextStyle(
-                                      color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
+                                      // Transactions of type transfer should be colored Google Blue,
+                                      // other transactions are green (inflow/income) or red (outflow/expense)
+                                      color: isTransfer 
+                                          ? AppColors.googleBlue 
+                                          : (isIncome ? AppColors.limeMoss : AppColors.cinnabar),
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
