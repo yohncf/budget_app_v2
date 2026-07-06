@@ -107,7 +107,19 @@ The four summary cards at the top of the Dashboard are structured as follows:
 
 ### Formatting Specifications
 *   All numeric values displayed on the dashboard cards are formatted under the US locale standards with proper thousands separator commas and two decimal places (e.g., `"$1,234,567.89"` or `"$0.00"`).
-*   This uses the `intl` package's `NumberFormat.currency(locale: 'en_US', symbol: '\$')` standard.
-
-
-
+*   This uses the `intl` package's `NumberFormat.currency(locale: 'en_US', symbol: '\$')` standard.### 5. Cash Flow Overview Line Graph
+*   **Data Aggregation Period**:
+    *   **Last 60 Days (default)**: Computes and plots checking account income vs credit card expenses over the last 60 days.
+    *   **Current Month**: Dynamically maps checking account income vs credit card expenses from the 1st of the current month until the last day of the current month.
+*   **Pills / Range Selection Toggle**:
+    *   An interactive, pill-style segmented control chip (designed using **Google Blue** `#4285F4` for the selected state) next to the chart title lets users choose between **60 Days** and **This Month**.
+    *   Since all transactions for the last 60 days are fetched in a single query, switching ranges is entirely local, instantaneous, and performs zero additional database queries.
+*   **Cumulative vs Daily View Toggle**:
+    *   An interactive segmented toggle above the chart allows the user to view either **Cumulative Sums** (step-like rising trends of total income vs total expenses) or raw **Daily Totals**.
+*   **Database Query Logic**:
+    *   **Checking Income**: Filtered for transactions on checking accounts (`account.type == 'checking'`) with positive amounts (`tx.amount > 0`) categorized as `income` or `reimbursement`.
+    *   **Credit Card Expenses**: Filtered for transactions on credit card accounts (`account.type == 'credit_card'`) with negative amounts (`tx.amount < 0`) categorized as `expense` or `tax`.
+*   **Hot-Reload Web Safety**:
+    *   The state variables `_chartTransactions`, `_chartMode`, and `_chartRange` are cast to `dynamic` inside `_getMainChartData()` to prevent JavaScript runtime crashes (`TypeError: this[_chartTransactions] is not iterable`) during Flutter Web hot reloads.
+*   **Dynamic Chart Formatting**:
+    *   The Y-axis maximum bounds (`maxY`), grid line spacing, and labels are computed dynamically depending on the maximum data point value to ensure visual scaling across any range of values.

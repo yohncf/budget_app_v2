@@ -18,9 +18,16 @@ class DashboardPageState extends State<DashboardPage> {
   
   List<Account> _accounts = [];
   List<Transaction> _transactions = [];
+
+  // Holds transaction history fetched from the database for the chart window (max 60 days).
   List<Transaction> _chartTransactions = [];
-  String _chartMode = 'cumulative'; // 'cumulative' or 'daily'
-  String _chartRange = '60days'; // '60days' or 'currentMonth'
+
+  // Chart visualization mode: 'cumulative' shows running total trends, 'daily' shows discrete daily sums.
+  String _chartMode = 'cumulative';
+
+  // Chart time range: '60days' displays last 60 days, 'currentMonth' filters to current calendar month.
+  String _chartRange = '60days';
+
   bool _isLoading = true;
   bool _showHoldingInChecking = false;
 
@@ -448,6 +455,8 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Builds a responsive, pill-style toggle button set to switch the chart time range
+  /// between a 60-day window and the current calendar month.
   Widget _buildRangeChips() {
     return Container(
       decoration: BoxDecoration(
@@ -465,6 +474,10 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Renders a single range chip option.
+  /// 
+  /// NOTE: We cast `_chartRange` to dynamic to bypass Flutter Web hot-reload state injection limitations
+  /// where newly added state variables are null on the hot-reloaded instance.
   Widget _buildRangeChipOption(String range, String label) {
     final dynamic rawRange = _chartRange;
     final String currentRange = rawRange == null ? '60days' : rawRange as String;
@@ -494,18 +507,26 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Formulates the fl_chart dataset dynamically based on checking accounts income vs credit card expenses.
+  /// 
+  /// Crucial Features:
+  /// 1. Time Normalization: Standardizes transaction dates to local midnight before computing index offsets.
+  /// 2. Double-toggle support: Supports range filters (60-day vs Current Month) and mode (Daily vs Cumulative).
+  /// 3. Dynamic Y-Axis scaling: Dynamically rounds maximum points to appropriate steps to avoid overflow/empty space.
   LineChartData _getMainChartData() {
     final today = DateTime.now();
     
+    // Dynamic cast check avoids runtime type crash during web hot-reloading
     final dynamic rawRange = _chartRange;
     final String range = rawRange == null ? '60days' : rawRange as String;
 
     DateTime startDate;
     int daysCount;
 
+    // Determine the calendar window coordinates
     if (range == 'currentMonth') {
       startDate = DateTime(today.year, today.month, 1);
-      daysCount = DateTime(today.year, today.month + 1, 0).day;
+      daysCount = DateTime(today.year, today.month + 1, 0).day; // dynamically computes days in this month
     } else {
       startDate = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 59));
       daysCount = 60;
