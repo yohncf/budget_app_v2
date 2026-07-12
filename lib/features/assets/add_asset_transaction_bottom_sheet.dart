@@ -43,6 +43,12 @@ class _AddAssetTransactionBottomSheetState extends State<AddAssetTransactionBott
   final _quantityController = TextEditingController();
   final _unitPriceController = TextEditingController();
 
+  // Searchable Autocomplete Fields
+  final _accountSearchController = TextEditingController();
+  final _accountFocusNode = FocusNode();
+  final _assetSearchController = TextEditingController();
+  final _assetFocusNode = FocusNode();
+
   String? _accountId;
   String? _assetId;
   late String _type; // 'buy', 'sell', 'dividend_reinvest', 'split', 'reward'
@@ -68,12 +74,48 @@ class _AddAssetTransactionBottomSheetState extends State<AddAssetTransactionBott
     }
 
     _loadData();
+
+    _accountSearchController.addListener(() {
+      if (_accounts.isEmpty) return;
+      final text = _accountSearchController.text.trim();
+      final match = _accounts.firstWhere(
+        (acc) => '${acc.name} (${acc.institution})'.toLowerCase() == text.toLowerCase(),
+        orElse: () => Account(id: '', name: '', type: '', institution: '', currency: '', currentBalance: 0, limit: 0, accountGroup: '', status: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      );
+      setState(() {
+        if (match.id.isNotEmpty) {
+          _accountId = match.id;
+        } else {
+          _accountId = null;
+        }
+      });
+    });
+
+    _assetSearchController.addListener(() {
+      if (_assets.isEmpty) return;
+      final text = _assetSearchController.text.trim();
+      final match = _assets.firstWhere(
+        (asset) => '${asset.symbol} - ${asset.name}'.toLowerCase() == text.toLowerCase() || asset.symbol.toLowerCase() == text.toLowerCase(),
+        orElse: () => Asset(id: '', symbol: '', name: '', type: ''),
+      );
+      setState(() {
+        if (match.id.isNotEmpty) {
+          _assetId = match.id;
+        } else {
+          _assetId = null;
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
     _quantityController.dispose();
     _unitPriceController.dispose();
+    _accountSearchController.dispose();
+    _accountFocusNode.dispose();
+    _assetSearchController.dispose();
+    _assetFocusNode.dispose();
     super.dispose();
   }
 
@@ -89,6 +131,24 @@ class _AddAssetTransactionBottomSheetState extends State<AddAssetTransactionBott
           _accounts = accountsList.where((acc) => acc.status == 'active').toList();
           _assets = assetsList;
           _isLoading = false;
+
+          if (widget.transaction != null) {
+            final selectedAcc = _accounts.firstWhere(
+              (acc) => acc.id == widget.transaction!.accountId,
+              orElse: () => Account(id: '', name: '', type: '', institution: '', currency: '', currentBalance: 0, limit: 0, accountGroup: '', status: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+            );
+            if (selectedAcc.id.isNotEmpty) {
+              _accountSearchController.text = '${selectedAcc.name} (${selectedAcc.institution})';
+            }
+
+            final selectedAsset = _assets.firstWhere(
+              (asset) => asset.id == widget.transaction!.assetId,
+              orElse: () => Asset(id: '', symbol: '', name: '', type: ''),
+            );
+            if (selectedAsset.id.isNotEmpty) {
+              _assetSearchController.text = '${selectedAsset.symbol} - ${selectedAsset.name}';
+            }
+          }
         });
       }
     } catch (e) {
@@ -286,6 +346,37 @@ class _AddAssetTransactionBottomSheetState extends State<AddAssetTransactionBott
     }
   }
 
+  InputDecoration _buildInputDecoration({
+    required String labelText,
+    required IconData prefixIcon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      labelStyle: const TextStyle(color: Colors.white70),
+      prefixIcon: Icon(prefixIcon, color: AppColors.limeMoss),
+      suffixIcon: suffixIcon,
+      fillColor: AppColors.background,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white10),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.limeMoss, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.cinnabar),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.cinnabar, width: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -405,56 +496,176 @@ class _AddAssetTransactionBottomSheetState extends State<AddAssetTransactionBott
                 const SizedBox(height: 20),
 
                 // Account Selection
-                DropdownButtonFormField<String>(
-                  value: _accountId,
-                  hint: const Text('Select Account', style: TextStyle(color: Colors.white30)),
-                  dropdownColor: AppColors.card,
-                  decoration: InputDecoration(
-                    labelText: 'Custody Account',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    prefixIcon: const Icon(Icons.account_balance, color: AppColors.limeMoss),
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: _accounts.map((acc) {
-                    return DropdownMenuItem<String>(
-                      value: acc.id,
-                      child: Text('${acc.name} (${acc.institution})', style: const TextStyle(color: Colors.white)),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _accountId = val;
-                    });
+                RawAutocomplete<Account>(
+                  textEditingController: _accountSearchController,
+                  focusNode: _accountFocusNode,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return _accounts;
+                    }
+                    return _accounts.where((acc) =>
+                        acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        acc.institution.toLowerCase().contains(textEditingValue.text.toLowerCase()));
                   },
-                  validator: (val) => val == null ? 'Required field' : null,
+                  displayStringForOption: (acc) => '${acc.name} (${acc.institution})',
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _buildInputDecoration(
+                        labelText: 'Custody Account',
+                        prefixIcon: Icons.account_balance,
+                        suffixIcon: _accountId != null
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: Colors.white54),
+                                onPressed: () {
+                                  setState(() {
+                                    _accountId = null;
+                                    _accountSearchController.clear();
+                                  });
+                                },
+                              )
+                            : null,
+                      ),
+                      onFieldSubmitted: (val) => onFieldSubmitted(),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Please select a custody account';
+                        }
+                        final valid = _accounts.any((acc) =>
+                            '${acc.name} (${acc.institution})'.toLowerCase() == val.trim().toLowerCase());
+                        if (!valid) {
+                          return 'Select an account from suggestions';
+                        }
+                        return null;
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          width: MediaQuery.of(context).size.width - 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF161616),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final acc = options.elementAt(index);
+                              final highlightedIndex = AutocompleteHighlightedOption.of(context);
+                              final isHighlighted = highlightedIndex == index;
+                              return Material(
+                                color: isHighlighted ? Colors.white10 : Colors.transparent,
+                                child: ListTile(
+                                  visualDensity: VisualDensity.compact,
+                                  title: Text(acc.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                  subtitle: Text(acc.institution, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                  onTap: () => onSelected(acc),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
 
                 // Asset Selection
-                DropdownButtonFormField<String>(
-                  value: _assetId,
-                  hint: const Text('Select Asset', style: TextStyle(color: Colors.white30)),
-                  dropdownColor: AppColors.card,
-                  decoration: InputDecoration(
-                    labelText: 'Asset Ticker',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    prefixIcon: const Icon(Icons.show_chart, color: AppColors.limeMoss),
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: _assets.map((asset) {
-                    return DropdownMenuItem<String>(
-                      value: asset.id,
-                      child: Text('${asset.symbol} - ${asset.name}', style: const TextStyle(color: Colors.white)),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _assetId = val;
-                    });
+                RawAutocomplete<Asset>(
+                  textEditingController: _assetSearchController,
+                  focusNode: _assetFocusNode,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return _assets;
+                    }
+                    return _assets.where((asset) =>
+                        asset.symbol.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        asset.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
                   },
-                  validator: (val) => val == null ? 'Required field' : null,
+                  displayStringForOption: (asset) => '${asset.symbol} - ${asset.name}',
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _buildInputDecoration(
+                        labelText: 'Asset Ticker',
+                        prefixIcon: Icons.show_chart,
+                        suffixIcon: _assetId != null
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: Colors.white54),
+                                onPressed: () {
+                                  setState(() {
+                                    _assetId = null;
+                                    _assetSearchController.clear();
+                                  });
+                                },
+                              )
+                            : null,
+                      ),
+                      onFieldSubmitted: (val) => onFieldSubmitted(),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Please select an asset';
+                        }
+                        final valid = _assets.any((asset) =>
+                            '${asset.symbol} - ${asset.name}'.toLowerCase() == val.trim().toLowerCase());
+                        if (!valid) {
+                          return 'Select an asset from suggestions';
+                        }
+                        return null;
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          width: MediaQuery.of(context).size.width - 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF161616),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final asset = options.elementAt(index);
+                              final highlightedIndex = AutocompleteHighlightedOption.of(context);
+                              final isHighlighted = highlightedIndex == index;
+                              return Material(
+                                color: isHighlighted ? Colors.white10 : Colors.transparent,
+                                child: ListTile(
+                                  visualDensity: VisualDensity.compact,
+                                  title: Text(asset.symbol, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                                  subtitle: Text(asset.name, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                  onTap: () => onSelected(asset),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
 

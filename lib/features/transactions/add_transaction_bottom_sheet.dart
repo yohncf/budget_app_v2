@@ -325,8 +325,10 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
   }
 
   List<Account> _getFilteredAccounts(int tabIndex) {
-    if (tabIndex == 0 || tabIndex == 1) {
+    if (tabIndex == 0) {
       return _accounts.where((acc) => acc.accountGroup == 'credit' || acc.type == 'checking').toList();
+    } else if (tabIndex == 1) {
+      return _accounts.where((acc) => acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'retirement').toList();
     } else {
       return _accounts;
     }
