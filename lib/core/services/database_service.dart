@@ -261,9 +261,6 @@ class DatabaseService {
   // --- HOLDINGS & ASSET TRANSACTIONS ---
   Future<List<Holding>> fetchHoldings() async {
     try {
-      // Sync cash balances to fiat holdings before displaying them
-      await syncAllFiatHoldings();
-
       final response = await _client
           .from('holdings')
           .select('*, accounts(name), assets(*)');
