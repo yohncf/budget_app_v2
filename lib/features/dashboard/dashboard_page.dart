@@ -1069,154 +1069,134 @@ class _CategoryExpenseChartCardState extends State<CategoryExpenseChartCard> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 600;
+                // Determine the size of the donut chart based on available width, giving it more space
+                final chartSize = constraints.maxWidth < 400 
+                    ? (constraints.maxWidth - 48).clamp(200.0, 360.0) 
+                    : 360.0;
+                
+                final scale = chartSize / 360.0;
+                final centerRadius = 110.0 * scale;
+                
+                final showTouchedInfo = _touchedIndex >= 0 && _touchedIndex < segments.length;
+                final touchedSegment = showTouchedInfo ? segments[_touchedIndex] : null;
+                final touchedPercent = touchedSegment != null ? (touchedSegment.amount / totalSum) * 100 : 0.0;
 
-                final chartWidget = SizedBox(
-                  height: 280,
-                  width: 280,
-                  child: Stack(
-                    children: [
-                      PieChart(
-                        PieChartData(
-                          pieTouchData: PieTouchData(
-                            touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                              setState(() {
-                                if (!event.isInterestedForInteractions ||
-                                    pieTouchResponse == null ||
-                                    pieTouchResponse.touchedSection == null) {
-                                  _touchedIndex = -1;
-                                  return;
-                                }
-                                _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                              });
-                            },
+                return Center(
+                  child: SizedBox(
+                    height: chartSize,
+                    width: chartSize,
+                    child: MouseRegion(
+                      onExit: (_) {
+                        setState(() {
+                          _touchedIndex = -1;
+                        });
+                      },
+                      child: Stack(
+                        children: [
+                          PieChart(
+                            PieChartData(
+                              pieTouchData: PieTouchData(
+                                touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                  setState(() {
+                                    if (!event.isInterestedForInteractions ||
+                                        pieTouchResponse == null ||
+                                        pieTouchResponse.touchedSection == null) {
+                                      _touchedIndex = -1;
+                                      return;
+                                    }
+                                    _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                                  });
+                                },
+                              ),
+                              borderData: FlBorderData(show: false),
+                              sectionsSpace: 3,
+                              centerSpaceRadius: centerRadius,
+                              sections: List.generate(segments.length, (i) {
+                                final isTouched = i == _touchedIndex;
+                                final segment = segments[i];
+                                final radius = isTouched ? (38.0 * scale) : (28.0 * scale);
+                                return PieChartSectionData(
+                                  color: segment.color,
+                                  value: segment.amount,
+                                  title: '',
+                                  radius: radius,
+                                );
+                              }),
+                            ),
                           ),
-                          borderData: FlBorderData(show: false),
-                          sectionsSpace: 3,
-                          centerSpaceRadius: 85,
-                          sections: List.generate(segments.length, (i) {
-                            final isTouched = i == _touchedIndex;
-                            final segment = segments[i];
-                            final radius = isTouched ? 34.0 : 24.0;
-                            return PieChartSectionData(
-                              color: segment.color,
-                              value: segment.amount,
-                              title: '',
-                              radius: radius,
-                            );
-                          }),
-                        ),
-                      ),
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'TOTAL',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
+                          Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24.0 * scale),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: showTouchedInfo && touchedSegment != null
+                                    ? [
+                                        Text(
+                                          touchedSegment.category.name.toUpperCase(),
+                                          style: TextStyle(
+                                            color: touchedSegment.color,
+                                            fontSize: 13.0 * scale,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.2,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        SizedBox(height: 6 * scale),
+                                        Text(
+                                          '${touchedPercent.toStringAsFixed(1)}%',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 26.0 * scale,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4 * scale),
+                                        Text(
+                                          _formatCurrency(touchedSegment.amount),
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.7),
+                                            fontSize: 13.0 * scale,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ]
+                                    : [
+                                        Text(
+                                          'TOTAL EXPENSES',
+                                          style: TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 10.0 * scale,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.5,
+                                          ),
+                                        ),
+                                        SizedBox(height: 8 * scale),
+                                        Text(
+                                          _formatCurrency(totalSum),
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 22.0 * scale,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _formatCurrency(totalSum),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 );
-
-                final legendWidget = ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: segments.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final segment = segments[index];
-                    final percent = (segment.amount / totalSum) * 100;
-                    final isTouched = index == _touchedIndex;
-
-                    return MouseRegion(
-                      onEnter: (_) => setState(() => _touchedIndex = index),
-                      onExit: (_) => setState(() => _touchedIndex = -1),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isTouched ? Colors.white.withOpacity(0.04) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: segment.color,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                  segment.category.name,
-                                  style: TextStyle(
-                                    color: isTouched ? Colors.white : Colors.white.withOpacity(0.9),
-                                    fontWeight: isTouched ? FontWeight.bold : FontWeight.w500,
-                                    fontSize: 14,
-                                  ),
-                              ),
-                            ),
-                            Text(
-                              '${percent.toStringAsFixed(1)}%',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              _formatCurrency(segment.amount),
-                              style: TextStyle(
-                                color: isTouched ? AppColors.limeMoss : Colors.white70,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-
-                if (isWide) {
-                  return Row(
-                    children: [
-                      Expanded(child: Center(child: chartWidget)),
-                      const SizedBox(width: 32),
-                      Expanded(child: legendWidget),
-                    ],
-                  );
-                } else {
-                  return Column(
-                    children: [
-                      Center(child: chartWidget),
-                      const SizedBox(height: 32),
-                      legendWidget,
-                    ],
-                  );
-                }
               },
             ),
         ],
