@@ -5,6 +5,8 @@ import '../dashboard/dashboard_page.dart';
 import '../accounts/accounts_page.dart';
 import '../transactions/transactions_page.dart';
 import '../transactions/add_transaction_bottom_sheet.dart';
+import '../assets/assets_page.dart';
+import '../assets/add_asset_transaction_bottom_sheet.dart';
 
 class MainLayout extends StatefulWidget {
   final VoidCallback onLogout;
@@ -30,6 +32,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
   final GlobalKey<AccountsPageState> _accountsKey = GlobalKey<AccountsPageState>();
   final GlobalKey<TransactionsPageState> _transactionsKey = GlobalKey<TransactionsPageState>();
   final GlobalKey<DashboardPageState> _dashboardKey = GlobalKey<DashboardPageState>();
+  final GlobalKey<AssetsPageState> _assetsKey = GlobalKey<AssetsPageState>();
 
   @override
   void initState() {
@@ -65,6 +68,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
     _accountsKey.currentState?.loadAccounts();
     _transactionsKey.currentState?.loadTransactions(reset: true);
     _dashboardKey.currentState?.loadData();
+    _assetsKey.currentState?.loadData();
   }
 
   Widget _getActivePage() {
@@ -75,6 +79,8 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         return AccountsPage(key: _accountsKey);
       case 2:
         return TransactionsPage(key: _transactionsKey);
+      case 3:
+        return AssetsPage(key: _assetsKey);
       default:
         return const Center(child: Text('Page not found'));
     }
@@ -101,6 +107,11 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         selectedIcon: Icon(Icons.swap_horiz, color: AppColors.limeMoss),
         label: 'Transactions',
       ),
+      NavigationDestination(
+        icon: Icon(Icons.trending_up_outlined),
+        selectedIcon: Icon(Icons.trending_up, color: AppColors.limeMoss),
+        label: 'Assets',
+      ),
     ];
 
     final List<SidebarDestination> sidebarDestinations = const [
@@ -118,6 +129,11 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         icon: Icons.swap_horiz_outlined,
         selectedIcon: Icons.swap_horiz,
         label: 'Transactions',
+      ),
+      SidebarDestination(
+        icon: Icons.trending_up_outlined,
+        selectedIcon: Icons.trending_up,
+        label: 'Assets',
       ),
     ];
 
@@ -347,7 +363,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                       child: GestureDetector(
                         onTap: () {
                           _toggleMenu();
-                          print('Add asset operation pressed');
+                          _showAddAssetTransactionBottomSheet();
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -368,7 +384,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                               Icon(Icons.trending_up, color: Color(0xFF1C1146), size: 20),
                               SizedBox(width: 10),
                               Text(
-                                'Add asset operation',
+                                'Record asset operation',
                                 style: TextStyle(
                                   color: Color(0xFF1C1146),
                                   fontWeight: FontWeight.bold,
@@ -423,6 +439,19 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddTransactionBottomSheet(
+        onSaved: () {
+          _triggerRefresh();
+        },
+      ),
+    );
+  }
+
+  void _showAddAssetTransactionBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddAssetTransactionBottomSheet(
         onSaved: () {
           _triggerRefresh();
         },

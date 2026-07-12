@@ -5,6 +5,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
+import '../../core/utils/currency_formatter.dart';
+
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -71,7 +73,7 @@ class DashboardPageState extends State<DashboardPage> {
 
   /// Formats a double amount into standard currency notation with commas: e.g., "$1,234,567.89".
   String _formatCurrency(double amount) {
-    return NumberFormat.currency(locale: 'en_US', symbol: '\$').format(amount);
+    return formatCurrency(amount);
   }
 
   /// Determines the card title for the checking account summary, dynamically adding "+ Holding" if toggled.
@@ -380,7 +382,7 @@ class DashboardPageState extends State<DashboardPage> {
                             style: const TextStyle(color: Colors.white, fontSize: 12),
                           ),
                           trailing: Text(
-                            '${isIncome ? "+" : ""}\$${tx.amount.toStringAsFixed(2)}',
+                            '${isIncome ? "+ " : ""}${formatCurrency(tx.amount)}',
                             style: TextStyle(
                               color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
                               fontWeight: FontWeight.bold,
@@ -728,12 +730,12 @@ class DashboardPageState extends State<DashboardPage> {
               if (value >= 1000) {
                 final kVal = value / 1000;
                 if (kVal == kVal.toInt()) {
-                  text = '\$${kVal.toInt()}k';
+                  text = '\$ ${kVal.toInt()}k';
                 } else {
-                  text = '\$${kVal.toStringAsFixed(1)}k';
+                  text = '\$ ${kVal.toStringAsFixed(1)}k';
                 }
               } else {
-                text = '\$${value.toInt()}';
+                text = '\$ ${value.toInt()}';
               }
               return SideTitleWidget(
                 meta: meta,
@@ -968,7 +970,7 @@ class _CategoryExpenseChartCardState extends State<CategoryExpenseChartCard> {
   }
 
   String _formatCurrency(double amount) {
-    return NumberFormat.currency(locale: 'en_US', symbol: '\$').format(amount);
+    return formatCurrency(amount);
   }
 
   @override

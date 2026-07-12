@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:budget_app_v2/core/config/app_colors.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
+import '../../core/utils/currency_formatter.dart';
+
 
 // Generates RFC4122 version 4 compliant UUIDs
 String _generateUuid() {
@@ -86,7 +88,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     if (account.currentBalance != 0.0) {
       _showErrorDialog(
         'Cannot Archive Account',
-        'Account "${account.name}" cannot be archived because it has a non-zero balance (\$${account.currentBalance.toStringAsFixed(2)}).\n\nPlease reconcile the balance to \$0.0 before archiving.',
+        'Account "${account.name}" cannot be archived because it has a non-zero balance (${formatCurrency(account.currentBalance)}).\n\nPlease reconcile the balance to ${formatCurrency(0)} before archiving.',
       );
       return;
     }
@@ -382,7 +384,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '\$${acc.currentBalance.toStringAsFixed(2)}',
+                      formatCurrency(acc.currentBalance),
                       style: TextStyle(
                         color: acc.currentBalance >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
                         fontWeight: FontWeight.bold,
@@ -392,7 +394,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                     const SizedBox(height: 2),
                     Text(
                       acc.limit > 0 
-                          ? 'Limit: \$${acc.limit.toStringAsFixed(0)} ${acc.currency}' 
+                          ? 'Limit: ${formatCurrency(acc.limit)} ${acc.currency}' 
                           : acc.currency,
                       style: const TextStyle(
                         color: Colors.white,

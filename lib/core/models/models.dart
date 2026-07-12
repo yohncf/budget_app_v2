@@ -281,3 +281,148 @@ class AccountSnapshot {
   }
 }
 
+/// Represents an investable asset (e.g. stock ticker, ETF, crypto, fiat currency, or commodity)
+/// mapped to the `assets` table in Supabase.
+class Asset {
+  final String id;
+  final String symbol; // E.g., 'VOO', 'MSFT', 'BTC'
+  final String name;   // E.g., 'Vanguard S&P 500 ETF'
+  final String type;   // E.g., 'etf', 'stock', 'crypto', 'fiat', 'commodity'
+
+  Asset({
+    required this.id,
+    required this.symbol,
+    required this.name,
+    required this.type,
+  });
+
+  factory Asset.fromJson(Map<String, dynamic> json) {
+    return Asset(
+      id: json['id'] as String,
+      symbol: json['symbol'] as String,
+      name: json['name'] as String,
+      type: json['type'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'symbol': symbol,
+      'name': name,
+      'type': type,
+    };
+  }
+}
+
+/// Represents the net accumulated position of a specific asset within a custody account.
+/// Summarizes transaction history in the `holdings` table, supporting cost basis calculations.
+class Holding {
+  final String id;
+  final String accountId;    // The custody account holding the asset (referencing the accounts table)
+  final String assetId;      // The target asset (referencing the assets table)
+  final double quantity;     // Fractional units held (can be negative if shorted/empty)
+  final double avgBuyPrice;  // The calculated cost basis/weighted average acquisition price
+  final DateTime updatedAt;  // Timestamp of the last applied transaction adjustment
+
+  // UI presentation fields populated via database joins
+  final String? accountName;
+  final Asset? asset;
+
+  Holding({
+    required this.id,
+    required this.accountId,
+    required this.assetId,
+    required this.quantity,
+    required this.avgBuyPrice,
+    required this.updatedAt,
+    this.accountName,
+    this.asset,
+  });
+
+  factory Holding.fromJson(Map<String, dynamic> json) {
+    final accountData = json['accounts'] as Map<String, dynamic>?;
+    final assetData = json['assets'] as Map<String, dynamic>?;
+
+    return Holding(
+      id: json['id'] as String,
+      accountId: json['account_id'] as String,
+      assetId: json['asset_id'] as String,
+      quantity: (json['quantity'] as num).toDouble(),
+      avgBuyPrice: (json['avg_buy_price'] as num).toDouble(),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      accountName: accountData != null ? accountData['name'] as String? : null,
+      asset: assetData != null ? Asset.fromJson(assetData) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'account_id': accountId,
+      'asset_id': assetId,
+      'quantity': quantity,
+      'avg_buy_price': avgBuyPrice,
+      'updated_at': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+/// Logs individual buy, sell, or adjustment operations for an asset in a specific account.
+/// Mapped directly to the `asset_transactions` table in Supabase.
+class AssetTransaction {
+  final String id;
+  final String accountId;   // The account execution cash flow and custody (referencing accounts)
+  final String assetId;     // The target asset (referencing assets)
+  final String type;        // 'buy', 'sell', 'dividend_reinvest', 'split', 'reward'
+  final double quantity;    // Count of units cleared in the operation
+  final double unitPrice;   // Transaction execution clearing price point
+  final DateTime executedAt;// Exact timestamp of the operation
+
+  // UI presentation fields populated via database joins
+  final String? accountName;
+  final Asset? asset;
+
+  AssetTransaction({
+    required this.id,
+    required this.accountId,
+    required this.assetId,
+    required this.type,
+    required this.quantity,
+    required this.unitPrice,
+    required this.executedAt,
+    this.accountName,
+    this.asset,
+  });
+
+  factory AssetTransaction.fromJson(Map<String, dynamic> json) {
+    final accountData = json['accounts'] as Map<String, dynamic>?;
+    final assetData = json['assets'] as Map<String, dynamic>?;
+
+    return AssetTransaction(
+      id: json['id'] as String,
+      accountId: json['account_id'] as String,
+      assetId: json['asset_id'] as String,
+      type: json['type'] as String,
+      quantity: (json['quantity'] as num).toDouble(),
+      unitPrice: (json['unit_price'] as num).toDouble(),
+      executedAt: DateTime.parse(json['executed_at'] as String),
+      accountName: accountData != null ? accountData['name'] as String? : null,
+      asset: assetData != null ? Asset.fromJson(assetData) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'account_id': accountId,
+      'asset_id': assetId,
+      'type': type,
+      'quantity': quantity,
+      'unit_price': unitPrice,
+      'executed_at': executedAt.toIso8601String(),
+    };
+  }
+}
+
+

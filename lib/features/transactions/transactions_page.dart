@@ -3,6 +3,7 @@ import 'package:budget_app_v2/core/config/app_colors.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
+import '../../core/utils/currency_formatter.dart';
 import 'add_transaction_bottom_sheet.dart';
 class TransactionsPage extends StatefulWidget {
   const TransactionsPage({super.key});
@@ -366,7 +367,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${isIncome ? "+" : ""}\$${tx.amount.toStringAsFixed(2)}',
+                                    '${isIncome ? "+ " : ""}${formatCurrency(tx.amount)}',
                                     style: TextStyle(
                                       // Transactions of type transfer should be colored Google Blue,
                                       // other transactions are green (inflow/income) or red (outflow/expense)
