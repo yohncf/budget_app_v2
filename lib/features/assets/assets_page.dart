@@ -5,6 +5,7 @@ import 'package:budget_app_v2/core/models/models.dart';
 import 'package:budget_app_v2/core/services/database_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'add_asset_transaction_bottom_sheet.dart';
+import '../../core/services/currency_service.dart';
 
 
 class AssetsPage extends StatefulWidget {
@@ -20,8 +21,10 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
 
   List<Holding> _holdings = [];
   List<AssetTransaction> _transactions = [];
+  List<Account> _accounts = [];
   bool _isLoadingHoldings = false;
   bool _isLoadingTransactions = false;
+  bool _isLoadingAccounts = false;
 
   // Search & Filter state for Transactions tab
   final _searchController = TextEditingController();
@@ -44,9 +47,34 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
 
   Future<void> loadData() async {
     await Future.wait([
+      loadAccounts(),
       loadHoldings(),
       loadTransactions(),
     ]);
+  }
+
+  Future<void> loadAccounts() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingAccounts = true;
+      });
+    }
+    try {
+      final list = await _databaseService.fetchAccounts();
+      if (mounted) {
+        setState(() {
+          _accounts = list;
+        });
+      }
+    } catch (e) {
+      print('Error loading accounts: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAccounts = false;
+        });
+      }
+    }
   }
 
   Future<void> loadHoldings() async {
@@ -111,8 +139,77 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
   }
 
   // --- Calculations ---
-  double get _totalPortfolioCost {
-    return _holdings.fold(0.0, (sum, holding) => sum + (holding.quantity * holding.avgBuyPrice));
+
+  double get _totalPortfolioCostInUSD {
+    double total = 0.0;
+    for (var holding in _holdings) {
+      final account = _getAccountById(holding.accountId);
+      final accountCurrency = account?.currency ?? 'USD';
+      final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
+      
+      final avgBuyPriceInUSD = holding.avgBuyPrice * accountCurrencyPriceInUSD;
+      total += (holding.quantity * avgBuyPriceInUSD);
+    }
+    return total;
+  }
+
+  double get _totalPortfolioMarketValue {
+    double total = 0.0;
+    for (var holding in _holdings) {
+      final symbol = holding.asset?.symbol ?? '';
+      final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
+      total += (holding.quantity * currentPriceInUSD);
+    }
+    return total;
+  }
+
+  Account? _getAccountById(String id) {
+    for (var account in _accounts) {
+      if (account.id == id) return account;
+    }
+    return null;
+  }
+
+  Widget _buildPortfolioProfitLossWidget() {
+    final cost = _totalPortfolioCostInUSD;
+    final market = _totalPortfolioMarketValue;
+    final diff = market - cost;
+    final pct = cost > 0 ? (diff / cost) * 100 : 0.0;
+
+    final isProfit = diff >= 0;
+    final color = isProfit ? AppColors.limeMoss : AppColors.cinnabar;
+    final icon = isProfit ? Icons.trending_up : Icons.trending_down;
+    final sign = isProfit ? '+' : '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                '$sign${pct.toStringAsFixed(2)}%',
+                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '$sign${formatCurrency(diff)}',
+            style: TextStyle(color: color, fontSize: 11),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, List<Holding>> get _holdingsByAccount {
@@ -248,23 +345,44 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'TOTAL PORTFOLIO BOOK COST',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    formatCurrency(_totalPortfolioCost),
-                    style: const TextStyle(
-                      color: AppColors.limeMoss,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'TOTAL PORTFOLIO VALUE (MARKET)',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            formatCurrency(_totalPortfolioMarketValue),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Cost Basis: ${formatCurrency(_totalPortfolioCostInUSD)}',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildPortfolioProfitLossWidget(),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -300,6 +418,19 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
             final accountTotalCost = accountHoldings.fold<double>(
               0.0,
               (sum, h) => sum + (h.quantity * h.avgBuyPrice),
+            );
+            
+            final accountTotalMarket = accountHoldings.fold<double>(
+              0.0,
+              (sum, h) {
+                final symbol = h.asset?.symbol ?? '';
+                final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? h.avgBuyPrice;
+                final account = _getAccountById(h.accountId);
+                final accountCurrency = account?.currency ?? 'USD';
+                final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
+                final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
+                return sum + (h.quantity * currentPriceInAccountCurrency);
+              },
             );
 
             return Padding(
@@ -340,13 +471,26 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                               ),
                             ],
                           ),
-                          Text(
-                            formatCurrency(accountTotalCost),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                formatCurrency(accountTotalMarket),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Book: ${formatCurrency(accountTotalCost)}',
+                                style: const TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -362,7 +506,22 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                         final assetName = holding.asset?.name ?? 'Unknown Asset';
                         final symbol = holding.asset?.symbol ?? 'ASSET';
                         final type = holding.asset?.type ?? 'other';
-                        final cost = holding.quantity * holding.avgBuyPrice;
+                        
+                        // Current price in account currency
+                        final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
+                        final account = _getAccountById(holding.accountId);
+                        final accountCurrency = account?.currency ?? 'USD';
+                        final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
+                        final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
+
+                        final bookValue = holding.quantity * holding.avgBuyPrice;
+                        final marketValue = holding.quantity * currentPriceInAccountCurrency;
+                        final gainLoss = marketValue - bookValue;
+                        final gainLossPercent = bookValue > 0 ? (gainLoss / bookValue) * 100 : 0.0;
+
+                        final isProfit = gainLoss >= 0;
+                        final trendColor = isProfit ? AppColors.limeMoss : AppColors.cinnabar;
+                        final trendSign = isProfit ? '+' : '';
 
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
@@ -402,7 +561,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                                 ),
                               ),
 
-                              // Position details (Quantity & Average Price)
+                              // Position details (Quantity, Average Price, Current Price)
                               Expanded(
                                 flex: 3,
                                 child: Column(
@@ -423,30 +582,48 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                                         fontSize: 11,
                                       ),
                                     ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Price: ${formatCurrency(currentPriceInAccountCurrency)}',
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
 
-                              // Total position cost
+                              // Financial value details (Market value, Book cost, Profit/Loss)
                               Expanded(
                                 flex: 3,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      formatCurrency(cost),
+                                      formatCurrency(marketValue),
                                       style: const TextStyle(
-                                        color: AppColors.limeMoss,
+                                        color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    const Text(
-                                      'Book Value',
-                                      style: TextStyle(
+                                    Text(
+                                      'Book: ${formatCurrency(bookValue)}',
+                                      style: const TextStyle(
                                         color: Colors.white38,
                                         fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '$trendSign${formatCurrency(gainLoss)} ($trendSign${gainLossPercent.toStringAsFixed(1)}%)',
+                                      style: TextStyle(
+                                        color: trendColor,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ],

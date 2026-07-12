@@ -7,6 +7,8 @@ import '../transactions/transactions_page.dart';
 import '../transactions/add_transaction_bottom_sheet.dart';
 import '../assets/assets_page.dart';
 import '../assets/add_asset_transaction_bottom_sheet.dart';
+import '../../core/services/currency_service.dart';
+import '../settings/settings_page.dart';
 
 class MainLayout extends StatefulWidget {
   final VoidCallback onLogout;
@@ -45,6 +47,9 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       parent: _animationController,
       curve: Curves.easeOut,
     );
+    
+    // Trigger currency rates checking on login/startup
+    CurrencyService().checkAndFetchRatesOnLogin();
   }
 
   @override
@@ -81,6 +86,8 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         return TransactionsPage(key: _transactionsKey);
       case 3:
         return AssetsPage(key: _assetsKey);
+      case 4:
+        return const SettingsPage();
       default:
         return const Center(child: Text('Page not found'));
     }
@@ -159,6 +166,18 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                 ],
               ),
               actions: [
+                IconButton(
+                  icon: Icon(
+                    Icons.settings,
+                    color: _selectedIndex == 4 ? AppColors.limeMoss : Colors.white70,
+                  ),
+                  tooltip: 'Settings',
+                  onPressed: () {
+                    setState(() {
+                      _selectedIndex = 4;
+                    });
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.refresh, color: Colors.white70),
                   tooltip: 'Refresh All Data',
@@ -261,6 +280,19 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.settings,
+                                color: _selectedIndex == 4 ? AppColors.limeMoss : Colors.white70,
+                              ),
+                              tooltip: 'Settings',
+                              onPressed: () {
+                                setState(() {
+                                  _selectedIndex = 4;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 8),
                             IconButton(
                               icon: const Icon(Icons.refresh, color: Colors.white70),
                               tooltip: 'Refresh All Data',

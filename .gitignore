@@ -47,5 +47,8 @@ app.*.map.json
 # Supabase Credentials Security
 lib/core/config/supabase_config.dart
 
+# AlphaVantage API Key Security
+lib/core/config/api_config.dart
+
 # Firebase cache/config
 .firebase/

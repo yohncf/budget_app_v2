@@ -130,3 +130,23 @@ The four summary cards at the top of the Dashboard are structured as follows:
 *   **Upscaled Donut Layout**: Rendered in a large (280x280) layout using `PieChart` from `fl_chart`. It features a clean, minimal design without text overlays on segments, displaying a total expense summary at the center.
 *   **Dual Hover & Focus Highlight**: Hovering over a donut chart segment highlights that segment and visualizes a hover state on the category item in the legend list. Hovering over a legend item highlights that item and highlights the corresponding donut segment in the chart.
 *   **Harmonious Color Palette**: Segment colors are resolved dynamically from the category's `colorHex` field, with a pre-defined premium fallback palette.
+
+---
+
+### 7. Currency API Caching, Settings, & Real-Time Portfolio Valuation
+*   **Navigation & Entrance Flow**:
+    *   A Settings gear icon has been integrated into the Custom Navigation Rail (desktop sidebar) and App Bar actions (mobile). Selecting the gear opens the stateful `SettingsPage`.
+*   **Active Currencies Management**:
+    *   Allows toggling/removing active currencies, displaying their latest USD valuation, and adding new physical/crypto currency symbols.
+    *   Default tracking list: `USD`, `MXN`, `SOL`, `KMNO`.
+*   **Rate Limits and Caching**:
+    *   To respect API caps, sync check executes at most **twice per day** with an 8-hour gap requirement, caching results in `SharedPreferences`.
+    *   Any custom currency symbol added by typing is instantly added to the active list and fetched during the next session login.
+    *   Diagnostics logs and daily sync quotas are displayed in a terminal console under the API Diagnostics tab.
+*   **API Interceptor Routing**:
+    *   Standard currencies/assets are processed sequentially with a 1-second delay via **AlphaVantage** (`CURRENCY_EXCHANGE_RATE` and `GLOBAL_QUOTE` functions).
+    *   The **KMNO** cryptocurrency token is intercepted and queried using the **CoinMarketCap** simple price endpoint to ensure lookup availability.
+*   **Cross-Currency Asset Reconciliations**:
+    *   Asset values are cached in USD and dynamically converted to the account's base currency code on the Assets Page:
+        $$\text{Current Price (Account Local)} = \frac{\text{USD Cached Price}}{\text{Account Base Currency Rate (USD)}}$$
+

@@ -94,9 +94,44 @@ To maintain high data integrity, the system implements the following advanced re
 ## 4. UI Layout and User Flows
 
 * **Assets View** (`lib/features/assets/assets_page.dart`):
-  * **Tab 1: Holdings Summary**: Displays total book value and groups active holdings under expandable/structured custody account cards.
+  * **Tab 1: Holdings Summary**: Displays total portfolio market value and book cost, and groups active holdings under expandable custody account cards.
   * **Tab 2: Asset Transactions**: Displays paginated transaction logs with hover animations. Tapping a card opens the editing form.
 * **Recording Form** (`lib/features/assets/add_asset_transaction_bottom_sheet.dart`):
   * Interactive choice chips for transaction type.
   * Validation rules ensuring valid quantities and pricing.
   * An integrated **Delete** confirmation flow (reversing all ledger balances automatically).
+
+---
+
+## 5. Currency API Integration and Live Valuations
+
+To provide real-time valuation of investment assets and foreign cash, the application integrates with external API endpoints to fetch exchange rates and stock prices.
+
+### API Routing Specifications
+1. **AlphaVantage API**:
+   - Primary data provider for physical/fiat currency pairs, crypto assets, and public stocks/ETFs.
+   - Endpoint for physical/crypto exchange rates: `CURRENCY_EXCHANGE_RATE`
+     `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={symbol}&to_currency=USD&apikey={apiKey}`
+   - Endpoint for stocks/ETFs: `GLOBAL_QUOTE`
+     `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={apiKey}`
+2. **CoinMarketCap Public API**:
+   - Specialized routing for **KMNO** (Kamino Finance token) via the simple price endpoint:
+     `https://pro-api.coinmarketcap.com/public-api/v1/simple/price?ids=30986&convert=USD`
+   - Bypasses AlphaVantage for this token to guarantee availability, parsed dynamically.
+
+### Rate Limit and Local Cache Enforcement
+To stay within free-tier limits, rates are checked **maximum twice per day**:
+1. **First sync**: Automatically triggered upon app startup/login for the calendar day.
+2. **Second sync**: Permitted only if at least **8 hours** have elapsed since the first sync.
+All values are cached locally using `SharedPreferences` (`shared_preferences: ^2.3.2`).
+Any new currency typed in Settings is added to the active checklist immediately, and its price is resolved on the next session start to prevent exceeding API rate limits.
+
+### Multi-Currency Conversion Logic
+Asset prices are cached in USD. When rendering holdings on the Assets Page, prices are converted to the parent account's local currency dynamically using the formula:
+$$\text{Price in Account Currency} = \frac{\text{Asset Price in USD}}{\text{Account Currency Price in USD}}$$
+This dynamically supports assets in USD or MXN accounts (e.g. VOO inside a MXN capital account is automatically valued in MXN based on the current USD/MXN rate).
+
+### Settings & Diagnostics UI
+* **Currencies Tab**: Shows active physical and crypto currencies list (USD, MXN, SOL, KMNO by default), their last fetched USD values, and a text field to add new tracking symbols.
+* **API Diagnostics Tab**: Displays sync stats (e.g., `1/2 fetches today`), last update time, and a scrolling live-updating mock terminal log of all network events. A developer "Force Update Now" bypasses the time limits (triggers confirmation warnings).
+
