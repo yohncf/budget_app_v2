@@ -25,6 +25,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
   bool _isLoadingHoldings = false;
   bool _isLoadingTransactions = false;
   bool _isLoadingAccounts = false;
+  String _portfolioCurrency = 'USD';
 
   // Search & Filter state for Transactions tab
   final _searchController = TextEditingController();
@@ -171,12 +172,19 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
   }
 
   Widget _buildPortfolioProfitLossWidget() {
-    final cost = _totalPortfolioCostInUSD;
-    final market = _totalPortfolioMarketValue;
-    final diff = market - cost;
-    final pct = cost > 0 ? (diff / cost) * 100 : 0.0;
+    final costUSD = _totalPortfolioCostInUSD;
+    final marketUSD = _totalPortfolioMarketValue;
+    final diffUSD = marketUSD - costUSD;
+    
+    double displayDiff = diffUSD;
+    if (_portfolioCurrency == 'MXN') {
+      final mxnRate = CurrencyService().getPrice('MXN') ?? 0.053;
+      displayDiff = diffUSD / mxnRate;
+    }
+    
+    final pct = costUSD > 0 ? (diffUSD / costUSD) * 100 : 0.0;
 
-    final isProfit = diff >= 0;
+    final isProfit = diffUSD >= 0;
     final color = isProfit ? AppColors.limeMoss : AppColors.cinnabar;
     final icon = isProfit ? Icons.trending_up : Icons.trending_down;
     final sign = isProfit ? '+' : '';
@@ -204,10 +212,36 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
           ),
           const SizedBox(height: 2),
           Text(
-            '$sign${formatCurrency(diff)}',
+            '$sign${formatCurrency(displayDiff)} $_portfolioCurrency',
             style: TextStyle(color: color, fontSize: 11),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCurrencyToggleBtn(String currency) {
+    final isSelected = _portfolioCurrency == currency;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _portfolioCurrency = currency;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.limeMoss : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          currency,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white70,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+        ),
       ),
     );
   }
@@ -325,6 +359,17 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
 
     final groupedHoldings = _holdingsByAccount;
 
+    final double marketValueUSD = _totalPortfolioMarketValue;
+    final double costBasisUSD = _totalPortfolioCostInUSD;
+    
+    double displayMarket = marketValueUSD;
+    double displayCost = costBasisUSD;
+    if (_portfolioCurrency == 'MXN') {
+      final mxnRate = CurrencyService().getPrice('MXN') ?? 0.053;
+      displayMarket = marketValueUSD / mxnRate;
+      displayCost = costBasisUSD / mxnRate;
+    }
+
     return RefreshIndicator(
       onRefresh: loadHoldings,
       color: AppColors.limeMoss,
@@ -352,18 +397,37 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'TOTAL PORTFOLIO VALUE (MARKET)',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1.2,
-                            ),
+                          Row(
+                            children: [
+                              const Text(
+                                'TOTAL PORTFOLIO VALUE (MARKET)',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                padding: const EdgeInsets.all(2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildCurrencyToggleBtn('USD'),
+                                    _buildCurrencyToggleBtn('MXN'),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            formatCurrency(_totalPortfolioMarketValue),
+                            '${formatCurrency(displayMarket)} $_portfolioCurrency',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 32,
@@ -372,7 +436,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Cost Basis: ${formatCurrency(_totalPortfolioCostInUSD)}',
+                            'Cost Basis: ${formatCurrency(displayCost)} $_portfolioCurrency',
                             style: const TextStyle(
                               color: Colors.white38,
                               fontSize: 12,
