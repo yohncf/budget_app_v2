@@ -62,7 +62,8 @@ This document outlines the architecture, relationships, constraints, and operati
 | `start_date` | `DATE` | `NOT NULL` | Horizon initiation date (Y-M-D). |
 | `end_date` | `DATE` | `NULL` allowed | Terminating threshold date. |
 | `next_due_date` | `DATE` | `NULL` allowed | System automated execution state pointer. |
-| `budget` | `FLOAT8` | `NOT NULL`, `CHECK` | Designated maximum budget allocation amount. |
+| `budget` | `FLOAT8` | `NOT NULL`, `CHECK` | Designated maximum budget allocation amount (`>= 0.0`). |
+| `running_amount` | `FLOAT8` | `NOT NULL`, `CHECK` | Accumulated spent amount in active cycle (`>= 0.0`). Resets on cycle rollover. |
 | `budget_period` | `TEXT` | `NOT NULL`, `CHECK` | Frequency grouping mapping. |
 | `budget_end_date`| `DATE` | `NULL` allowed | Target final date bounds. |
 | `status` | `TEXT` | `NOT NULL`, `CHECK` | `'active'` or `'inactive'`. |

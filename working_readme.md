@@ -135,3 +135,43 @@ This dynamically supports assets in USD or MXN accounts (e.g. VOO inside a MXN c
 * **Currencies Tab**: Shows active physical and crypto currencies list (USD, MXN, SOL, KMNO by default), their last fetched USD values, and a text field to add new tracking symbols.
 * **API Diagnostics Tab**: Displays sync stats (e.g., `1/2 fetches today`), last update time, and a scrolling live-updating mock terminal log of all network events. A developer "Force Update Now" bypasses the time limits (triggers confirmation warnings).
 
+---
+
+## 6. Recurring Budget Expense Tracking & Expected Monthly Expenses UI
+
+### Overview
+The `recurring_budget` system manages recurring category spending limits, execution intervals (`frequency` and `interval`), automated period cycle rollovers, and active progress tracking via the `running_amount` column.
+
+### Database Schema Dynamics (`recurring_budget`)
+* `id` (`UUID`, Primary Key): Automation record identifier.
+* `category_id` (`UUID`, references `categories`): Target expense category.
+* `amount` (`FLOAT8`): Expected single transaction amount threshold.
+* `frequency` (`TEXT`): Cycle period (`'daily'`, `'weekly'`, `'monthly'`, `'yearly'`).
+* `interval` (`INTEGER`): Step count for frequency multiplier (e.g., `frequency = 'monthly'` with `interval = 2` means every 2 months).
+* `next_due_date` (`DATE`): Date pointer indicating when the next recurring expense is due. Automatically advances by `interval` step count when an expense transaction is logged in the due month.
+* `budget` (`FLOAT8`): Maximum budget threshold allocated for the category period.
+* `running_amount` (`FLOAT8`): Accumulated total spent in the current active cycle period. Resets to `0.0` when a new cycle period begins.
+* `status` (`TEXT`): `'active'` or `'inactive'`.
+
+### Expense Ledger Automation (`DatabaseService`)
+1. **Expense Logging (`processExpenseForRecurringBudget`)**:
+   - Whenever an expense transaction is created, updated, or deleted, `DatabaseService` checks if there is an active `recurring_budget` matching the category.
+   - For new expenses: `running_amount` increases by the transaction amount (`running_amount += txAmount`).
+   - For deleted expenses: `running_amount` decreases by the transaction amount (`running_amount = max(0, running_amount - txAmount)`).
+   - For edited expenses: `running_amount` adjusts by the net delta (`running_amount += (newTxAmount - oldTxAmount)`).
+   - **`next_due_date` Advancement**: When an expense is recorded for the active cycle month, `next_due_date` advances forward by `interval` period steps (`advanceDateByFrequency`).
+2. **Cycle Rollover Check (`_checkAndRolloverRecurringBudgetCycle`)**:
+   - When fetching recurring budgets, the service evaluates if `DateTime.now()` has advanced into a new cycle period relative to `next_due_date`.
+   - If the previous cycle has expired, `running_amount` is automatically reset to `0.0` in Supabase.
+
+### Dashboard UI Section (`CurrentMonthRecurringExpensesCard`)
+* **Location**: Positioned directly below the "Category Expenses" card (`CategoryExpenseChartCard`) on the Dashboard.
+* **Filtering**: Only displays active recurring budgets where `next_due_date` matches the current calendar month and year (`isDueInMonth(targetMonth)`).
+* **UI Elements**:
+  - Category icon, name, and color badge.
+  - Formatted frequency & interval description (e.g., *"Every Month"*, *"Every 2 Months"*).
+  - Next due date indicator (e.g., *"Due Jul 25"*).
+  - Spending progress: `${running_amount} / ${budget}` display with spend percentage.
+  - Linear progress bar dynamically styled in green (`AppColors.limeMoss`), muted gray, or red (`AppColors.cinnabar`) when over budget.
+
+

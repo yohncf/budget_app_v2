@@ -138,6 +138,194 @@ class DatabaseService {
     }
   }
 
+  /// Pure Dart helper to get total days in a month for accurate date calculations.
+  int _getDaysInMonth(int year, int month) {
+    if (month == 2) {
+      final bool isLeapYear = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+      return isLeapYear ? 29 : 28;
+    }
+    const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return daysInMonth[month];
+  }
+
+  /// Advances [baseDate] forward by [interval] steps of [frequency] ('daily', 'weekly', 'monthly', 'yearly').
+  DateTime advanceDateByFrequency(DateTime baseDate, String frequency, int interval) {
+    final freq = frequency.toLowerCase();
+    if (freq == 'daily') {
+      return baseDate.add(Duration(days: interval));
+    } else if (freq == 'weekly') {
+      return baseDate.add(Duration(days: interval * 7));
+    } else if (freq == 'monthly') {
+      int newYear = baseDate.year;
+      int newMonth = baseDate.month + interval;
+      while (newMonth > 12) {
+        newYear++;
+        newMonth -= 12;
+      }
+      int maxDays = _getDaysInMonth(newYear, newMonth);
+      int newDay = baseDate.day > maxDays ? maxDays : baseDate.day;
+      return DateTime(newYear, newMonth, newDay, baseDate.hour, baseDate.minute);
+    } else if (freq == 'yearly') {
+      int newYear = baseDate.year + interval;
+      int maxDays = _getDaysInMonth(newYear, baseDate.month);
+      int newDay = baseDate.day > maxDays ? maxDays : baseDate.day;
+      return DateTime(newYear, baseDate.month, newDay, baseDate.hour, baseDate.minute);
+    }
+    return baseDate.add(Duration(days: interval * 30));
+  }
+
+  /// Checks if a recurring budget has crossed into a new period cycle based on frequency/interval.
+  /// Resets running_amount to 0.0 in Supabase if the cycle has expired.
+  Future<RecurringBudget> _checkAndRolloverRecurringBudgetCycle(RecurringBudget budget) async {
+    final now = DateTime.now();
+    if (budget.nextDueDate == null) return budget;
+
+    final freq = budget.frequency.toLowerCase();
+    bool isExpired = false;
+
+    if (freq == 'monthly') {
+      // Expired if current calendar year/month is past the next_due_date month/year cycle
+      if (now.year > budget.nextDueDate!.year ||
+          (now.year == budget.nextDueDate!.year && now.month > budget.nextDueDate!.month)) {
+        isExpired = true;
+      }
+    } else if (freq == 'daily' || freq == 'weekly') {
+      if (now.isAfter(budget.nextDueDate!)) {
+        isExpired = true;
+      }
+    } else if (freq == 'yearly') {
+      if (now.year > budget.nextDueDate!.year) {
+        isExpired = true;
+      }
+    }
+
+    if (isExpired && budget.runningAmount > 0) {
+      try {
+        await _client
+            .from('recurring_budget')
+            .update({'running_amount': 0.0})
+            .eq('id', budget.id);
+
+        return RecurringBudget(
+          id: budget.id,
+          categoryId: budget.categoryId,
+          amount: budget.amount,
+          frequency: budget.frequency,
+          interval: budget.interval,
+          startDate: budget.startDate,
+          endDate: budget.endDate,
+          nextDueDate: budget.nextDueDate,
+          budget: budget.budget,
+          runningAmount: 0.0,
+          budgetPeriod: budget.budgetPeriod,
+          budgetEndDate: budget.budgetEndDate,
+          status: budget.status,
+          description: budget.description,
+          createdAt: budget.createdAt,
+          categoryName: budget.categoryName,
+          categoryIcon: budget.categoryIcon,
+          categoryColorHex: budget.categoryColorHex,
+        );
+      } catch (e) {
+        print('Error resetting recurring_budget cycle: $e');
+      }
+    }
+
+    return budget;
+  }
+
+  /// Fetches all recurring budgets from Supabase joined with category details.
+  /// Automatically evaluates cycle period rollovers, resetting running_amount when entering a new cycle.
+  Future<List<RecurringBudget>> fetchRecurringBudgetsWithCategories() async {
+    try {
+      final response = await _client
+          .from('recurring_budget')
+          .select('*, categories(name, icon, color_hex)')
+          .order('next_due_date', ascending: true);
+
+      final List<RecurringBudget> budgets = [];
+      for (final json in response as List) {
+        RecurringBudget budget = RecurringBudget.fromJson(json);
+        budget = await _checkAndRolloverRecurringBudgetCycle(budget);
+        budgets.add(budget);
+      }
+      return budgets;
+    } catch (e) {
+      print('Supabase fetchRecurringBudgetsWithCategories error: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches active recurring budgets whose next_due_date matches the current calendar month & year.
+  Future<List<RecurringBudget>> fetchCurrentMonthRecurringBudgets() async {
+    try {
+      final budgets = await fetchRecurringBudgetsWithCategories();
+      final now = DateTime.now();
+      return budgets.where((b) => b.status == 'active' && b.isDueInMonth(now)).toList();
+    } catch (e) {
+      print('Supabase fetchCurrentMonthRecurringBudgets error: $e');
+      rethrow;
+    }
+  }
+
+  /// Updates running_amount and advances next_due_date for an active recurring budget
+  /// whenever an expense transaction matching the recurring category is created, updated, or deleted.
+  Future<void> processExpenseForRecurringBudget(Transaction tx, {Transaction? oldTx, bool isDelete = false}) async {
+    try {
+      // Only process expense transactions (negative amount)
+      if (tx.amount >= 0 && (oldTx == null || oldTx.amount >= 0)) return;
+
+      // Fetch active recurring budget matching tx.categoryId
+      final response = await _client
+          .from('recurring_budget')
+          .select('*, categories(name, icon, color_hex)')
+          .eq('category_id', tx.categoryId)
+          .eq('status', 'active')
+          .maybeSingle();
+
+      if (response == null) return;
+
+      RecurringBudget budget = RecurringBudget.fromJson(response);
+      budget = await _checkAndRolloverRecurringBudgetCycle(budget);
+
+      double currentRunning = budget.runningAmount;
+      double newExpenseAmount = isDelete ? 0.0 : tx.amount.abs();
+      double oldExpenseAmount = oldTx != null ? oldTx.amount.abs() : 0.0;
+
+      if (isDelete) {
+        currentRunning = max(0.0, currentRunning - tx.amount.abs());
+      } else {
+        currentRunning = max(0.0, currentRunning - oldExpenseAmount + newExpenseAmount);
+      }
+
+      // Advance next_due_date if expense is recorded for the current due cycle
+      DateTime? updatedDueDate = budget.nextDueDate;
+      if (!isDelete && budget.nextDueDate != null) {
+        final now = DateTime.now();
+        // If next_due_date is due in current month or past due, advance it by interval and frequency
+        if (budget.nextDueDate!.year < now.year ||
+            (budget.nextDueDate!.year == now.year && budget.nextDueDate!.month <= now.month)) {
+          updatedDueDate = advanceDateByFrequency(budget.nextDueDate!, budget.frequency, budget.interval);
+        }
+      }
+
+      final updateData = <String, dynamic>{
+        'running_amount': currentRunning,
+      };
+      if (updatedDueDate != null) {
+        updateData['next_due_date'] = updatedDueDate.toIso8601String().split('T').first;
+      }
+
+      await _client
+          .from('recurring_budget')
+          .update(updateData)
+          .eq('id', budget.id);
+
+    } catch (e) {
+      print('Supabase processExpenseForRecurringBudget error: $e');
+    }
+  }
+
   // --- CATEGORIES WRITE ---
   Future<Category> saveCategory(Category category) async {
     try {
@@ -162,6 +350,9 @@ class DatabaseService {
           await updateAccountBalance(counterpart.accountId, -counterpart.amount);
         }
       }
+
+      // Revert recurring budget running_amount for deleted expense
+      await processExpenseForRecurringBudget(tx, isDelete: true);
     } catch (e) {
       print('Supabase deleteTransaction error: $e');
       rethrow;
@@ -215,6 +406,9 @@ class DatabaseService {
       }
       await updateAccountBalance(tx.accountId, tx.amount);
       
+      // Update recurring budget running_amount and next_due_date if applicable
+      await processExpenseForRecurringBudget(tx, oldTx: oldTx);
+
       return tx;
     } catch (e) {
       print('Supabase saveTransactionWithBalanceUpdate error: $e');

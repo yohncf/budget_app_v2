@@ -52,6 +52,7 @@ CREATE TABLE recurring_budget (
     end_date DATE,
     next_due_date DATE,
     budget FLOAT8 NOT NULL CHECK (budget >= 0.0),
+    running_amount FLOAT8 NOT NULL DEFAULT 0.0 CHECK (running_amount >= 0.0),
     budget_period TEXT NOT NULL CHECK (budget_period IN ('daily', 'weekly', 'monthly', 'yearly')),
     budget_end_date DATE,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),

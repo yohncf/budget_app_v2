@@ -425,4 +425,129 @@ class AssetTransaction {
   }
 }
 
+/// Represents a recurring budget schedule and spending limit configuration
+/// mapped directly to the `recurring_budget` table in Supabase.
+class RecurringBudget {
+  final String id;
+  final String categoryId;
+  final double amount;
+  final String frequency; // 'daily', 'weekly', 'monthly', 'yearly'
+  final int interval; // Period step multiplier (e.g. interval: 2 + frequency: 'monthly' = every 2 months)
+  final DateTime startDate;
+  final DateTime? endDate;
+  final DateTime? nextDueDate;
+  final double budget; // Designated maximum budget ceiling for this period
+  final double runningAmount; // Accumulated expenses in the current period cycle (resets on rollover)
+  final String budgetPeriod; // Frequency grouping mapping
+  final DateTime? budgetEndDate;
+  final String status; // 'active', 'inactive'
+  final String? description;
+  final DateTime createdAt;
+
+  // Joined UI presentation properties (fetched via database relational joins)
+  final String? categoryName;
+  final String? categoryIcon;
+  final String? categoryColorHex;
+
+  RecurringBudget({
+    required this.id,
+    required this.categoryId,
+    required this.amount,
+    required this.frequency,
+    required this.interval,
+    required this.startDate,
+    this.endDate,
+    this.nextDueDate,
+    required this.budget,
+    this.runningAmount = 0.0,
+    required this.budgetPeriod,
+    this.budgetEndDate,
+    required this.status,
+    this.description,
+    required this.createdAt,
+    this.categoryName,
+    this.categoryIcon,
+    this.categoryColorHex,
+  });
+
+  /// Factory constructor to deserialize json from Supabase query response
+  factory RecurringBudget.fromJson(Map<String, dynamic> json) {
+    final categoryData = json['categories'] as Map<String, dynamic>?;
+
+    return RecurringBudget(
+      id: json['id'] as String,
+      categoryId: json['category_id'] as String,
+      amount: (json['amount'] as num).toDouble(),
+      frequency: json['frequency'] as String,
+      interval: (json['interval'] as num?)?.toInt() ?? 1,
+      startDate: DateTime.parse(json['start_date'] as String),
+      endDate: json['end_date'] != null ? DateTime.parse(json['end_date'] as String) : null,
+      nextDueDate: json['next_due_date'] != null ? DateTime.parse(json['next_due_date'] as String) : null,
+      budget: (json['budget'] as num).toDouble(),
+      runningAmount: (json['running_amount'] as num?)?.toDouble() ?? 0.0,
+      budgetPeriod: json['budget_period'] as String,
+      budgetEndDate: json['budget_end_date'] != null ? DateTime.parse(json['budget_end_date'] as String) : null,
+      status: json['status'] as String,
+      description: json['description'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      categoryName: categoryData != null ? categoryData['name'] as String? : json['category_name'] as String?,
+      categoryIcon: categoryData != null ? categoryData['icon'] as String? : json['category_icon'] as String?,
+      categoryColorHex: categoryData != null ? categoryData['color_hex'] as String? : json['category_color_hex'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'category_id': categoryId,
+      'amount': amount,
+      'frequency': frequency,
+      'interval': interval,
+      'start_date': startDate.toIso8601String().split('T').first,
+      'end_date': endDate?.toIso8601String().split('T').first,
+      'next_due_date': nextDueDate?.toIso8601String().split('T').first,
+      'budget': budget,
+      'running_amount': runningAmount,
+      'budget_period': budgetPeriod,
+      'budget_end_date': budgetEndDate?.toIso8601String().split('T').first,
+      'status': status,
+      'description': description,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
+  /// Formatted user-facing description of frequency and interval.
+  /// E.g., interval: 1, frequency: 'monthly' -> "Every Month"
+  /// E.g., interval: 2, frequency: 'monthly' -> "Every 2 Months"
+  String get formattedFrequencyInterval {
+    final freqStr = frequency.toLowerCase();
+    if (interval == 1) {
+      if (freqStr == 'monthly') return 'Every Month';
+      if (freqStr == 'weekly') return 'Every Week';
+      if (freqStr == 'daily') return 'Every Day';
+      if (freqStr == 'yearly') return 'Every Year';
+      return 'Every $frequency';
+    } else {
+      if (freqStr == 'monthly') return 'Every $interval Months';
+      if (freqStr == 'weekly') return 'Every $interval Weeks';
+      if (freqStr == 'daily') return 'Every $interval Days';
+      if (freqStr == 'yearly') return 'Every $interval Years';
+      return 'Every $interval $frequency';
+    }
+  }
+
+  /// Returns true if next_due_date matches the specified year and month.
+  bool isDueInMonth(DateTime targetMonth) {
+    if (nextDueDate == null) return false;
+    return nextDueDate!.year == targetMonth.year && nextDueDate!.month == targetMonth.month;
+  }
+
+  /// Calculates ratio of running_amount spent relative to budget limit.
+  double get budgetProgressRatio {
+    if (budget <= 0) return 0.0;
+    return runningAmount / budget;
+  }
+}
+
+
 

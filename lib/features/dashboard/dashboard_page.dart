@@ -24,6 +24,7 @@ class DashboardPageState extends State<DashboardPage> {
 
   // Holds transaction history fetched from the database for the chart window (max 60 days).
   List<Transaction> _chartTransactions = [];
+  List<RecurringBudget> _currentMonthRecurringBudgets = [];
 
   // Chart visualization mode: 'cumulative' shows running total trends, 'daily' shows discrete daily sums.
   String _chartMode = 'cumulative';
@@ -56,11 +57,14 @@ class DashboardPageState extends State<DashboardPage> {
         offset: 0,
       );
 
+      final currentMonthRecurring = await _databaseService.fetchCurrentMonthRecurringBudgets();
+
       setState(() {
         _accounts = accounts.where((acc) => acc.status != 'archived').toList();
         _transactions = transactions;
         _chartTransactions = chartTransactions;
         _categories = categories;
+        _currentMonthRecurringBudgets = currentMonthRecurring;
       });
     } catch (e) {
       print('Error loading dashboard data: $e');
@@ -326,6 +330,10 @@ class DashboardPageState extends State<DashboardPage> {
               chartTransactions: _chartTransactions,
               categories: _categories,
               chartRange: _chartRange,
+            ),
+            const SizedBox(height: 32),
+            CurrentMonthRecurringExpensesCard(
+              recurringBudgets: _currentMonthRecurringBudgets,
             ),
             const SizedBox(height: 32),
 
@@ -1204,3 +1212,226 @@ class _CategoryExpenseChartCardState extends State<CategoryExpenseChartCard> {
     );
   }
 }
+
+/// Renders expected category expenses that match the current calendar month's `next_due_date`.
+/// Positioned directly below the "Category Expenses" card on the Dashboard.
+class CurrentMonthRecurringExpensesCard extends StatelessWidget {
+  final List<RecurringBudget> recurringBudgets;
+
+  const CurrentMonthRecurringExpensesCard({
+    super.key,
+    required this.recurringBudgets,
+  });
+
+  Color _parseHexColor(String? hexString, {Color fallback = AppColors.limeMoss}) {
+    if (hexString == null || hexString.isEmpty) return fallback;
+    try {
+      final hex = hexString.replaceAll('#', '');
+      if (hex.length == 6) {
+        return Color(int.parse('FF$hex', radix: 16));
+      } else if (hex.length == 8) {
+        return Color(int.parse(hex, radix: 16));
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final monthYearStr = DateFormat('MMMM yyyy').format(DateTime.now());
+
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24.0),
+        border: Border.all(color: Colors.transparent, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row: Section title, description, and expected count badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Expected Category Expenses',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Recurring category expenses scheduled for $monthYearStr',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.limeMoss.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.limeMoss.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '${recurringBudgets.length} Scheduled',
+                  style: const TextStyle(
+                    color: AppColors.limeMoss,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Content Area: Empty state vs List of scheduled category recurring budgets
+          if (recurringBudgets.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24.0),
+              child: Center(
+                child: Text(
+                  'No recurring category expenses scheduled for this month.',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: recurringBudgets.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                final budget = recurringBudgets[index];
+                final categoryColor = _parseHexColor(budget.categoryColorHex);
+                final ratio = budget.budgetProgressRatio;
+                final isOverBudget = budget.runningAmount > budget.budget;
+                final progressColor = isOverBudget
+                    ? AppColors.cinnabar
+                    : (budget.runningAmount == 0 ? Colors.white24 : categoryColor);
+
+                final dueDateStr = budget.nextDueDate != null
+                    ? DateFormat('MMM dd').format(budget.nextDueDate!)
+                    : 'N/A';
+
+                return Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(
+                      color: isOverBudget ? AppColors.cinnabar.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.05),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row: Category avatar & name vs Spent amount & percentage
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: categoryColor.withValues(alpha: 0.2),
+                                child: Icon(
+                                  Icons.repeat,
+                                  color: categoryColor,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    budget.categoryName ?? 'Category Expense',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        budget.formattedFrequencyInterval,
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '• Due: $dueDateStr',
+                                        style: TextStyle(
+                                          color: isOverBudget ? AppColors.cinnabar : AppColors.limeMoss,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${formatCurrency(budget.runningAmount)} / ${formatCurrency(budget.budget)}',
+                                style: TextStyle(
+                                  color: isOverBudget ? AppColors.cinnabar : Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${(ratio * 100).toStringAsFixed(0)}% spent',
+                                style: TextStyle(
+                                  color: isOverBudget ? AppColors.cinnabar : Colors.white54,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Progress Bar: Visual representation of running_amount vs budget ceiling
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: ratio.clamp(0.0, 1.0),
+                          minHeight: 8,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
