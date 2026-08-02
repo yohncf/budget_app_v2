@@ -6,6 +6,8 @@ import 'package:budget_app_v2/core/services/database_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'add_asset_transaction_bottom_sheet.dart';
 import '../../core/services/currency_service.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'dart:math' as math;
 
 
 class AssetsPage extends StatefulWidget {
@@ -26,6 +28,12 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
   bool _isLoadingTransactions = false;
   bool _isLoadingAccounts = false;
   String _portfolioCurrency = 'USD';
+
+  // Timeline chart state
+  bool _isLoadingTimeline = false;
+  List<FlSpot> _timelineSpots = [];
+  List<DateTime> _timelineDates = [];
+  String _timelineRange = 'ALL'; // '6M', '3Y', 'ALL'
 
   // Search & Filter state for Transactions tab
   final _searchController = TextEditingController();
@@ -52,6 +60,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
       loadHoldings(),
       loadTransactions(),
     ]);
+    await loadTimelineData();
   }
 
   Future<void> loadAccounts() async {
@@ -152,6 +161,636 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
       total += (holding.quantity * avgBuyPriceInUSD);
     }
     return total;
+  }
+
+  Future<void> loadTimelineData() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingTimeline = true;
+      });
+    }
+    try {
+      final targetAccounts = _accounts
+          .where((a) => a.accountGroup == 'capital' || a.accountGroup == 'retirement')
+          .toList();
+      if (targetAccounts.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _timelineSpots = [];
+            _timelineDates = [];
+            _isLoadingTimeline = false;
+          });
+        }
+        return;
+      }
+      final targetAccountIds = targetAccounts.map((a) => a.id).toList();
+      final regularTx = await _databaseService.fetchAllTransactionsForAccounts(targetAccountIds);
+
+      _computeTimeline(targetAccounts, regularTx);
+    } catch (e) {
+      print('Error loading timeline data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingTimeline = false;
+        });
+      }
+    }
+  }
+
+  void _computeTimeline(List<Account> targetAccounts, List<Transaction> regularTx) {
+    if (_transactions.isEmpty && regularTx.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _timelineSpots = [];
+          _timelineDates = [];
+        });
+      }
+      return;
+    }
+
+    final List<dynamic> allEvents = [];
+    allEvents.addAll(regularTx);
+    allEvents.addAll(_transactions);
+    allEvents.sort((a, b) {
+      final dateA = a is Transaction ? a.date : (a as AssetTransaction).executedAt;
+      final dateB = b is Transaction ? b.date : (b as AssetTransaction).executedAt;
+      return dateA.compareTo(dateB);
+    });
+
+    if (allEvents.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _timelineSpots = [];
+          _timelineDates = [];
+        });
+      }
+      return;
+    }
+
+    final firstEvent = allEvents.first;
+    final firstDate = firstEvent is Transaction ? firstEvent.date : (firstEvent as AssetTransaction).executedAt;
+    final today = DateTime.now();
+
+    final List<DateTime> months = [];
+    DateTime current = DateTime(firstDate.year, firstDate.month, 1);
+    while (current.isBefore(today) || (current.year == today.year && current.month == today.month)) {
+      final lastDay = DateTime(current.year, current.month + 1, 0);
+      months.add(lastDay);
+      current = DateTime(current.year, current.month + 1, 1);
+    }
+
+    if (months.length == 1) {
+      final prevMonth = DateTime(months.first.year, months.first.month - 1, 1);
+      months.insert(0, DateTime(prevMonth.year, prevMonth.month + 1, 0));
+    }
+
+    final Map<String, List<MapEntry<DateTime, double>>> assetPriceHistory = {};
+    for (var ev in allEvents) {
+      if (ev is AssetTransaction) {
+        final symbol = ev.asset?.symbol.toUpperCase() ?? '';
+        if (symbol.isNotEmpty) {
+          assetPriceHistory.putIfAbsent(symbol, () => []);
+          assetPriceHistory[symbol]!.add(MapEntry(ev.executedAt, ev.unitPrice));
+        }
+      }
+    }
+
+    for (var entries in assetPriceHistory.values) {
+      entries.sort((a, b) => a.key.compareTo(b.key));
+    }
+
+    // Initialize states to today's actual current values
+    final Map<String, Map<String, double>> holdingsState = {};
+    final Map<String, double> cashState = {};
+
+    for (var acc in targetAccounts) {
+      holdingsState[acc.id] = {};
+      
+      double cashToday = 0.0;
+      final fiatHolding = _holdings.firstWhere(
+        (h) => h.accountId == acc.id && h.asset?.type == 'fiat',
+        orElse: () => Holding(id: '', accountId: '', assetId: '', quantity: -1, avgBuyPrice: 0, updatedAt: DateTime.now()),
+      );
+      if (fiatHolding.quantity >= 0) {
+        cashToday = fiatHolding.quantity;
+      } else {
+        double nonCashBook = 0.0;
+        for (var h in _holdings) {
+          if (h.accountId == acc.id && h.asset?.type != 'fiat') {
+            nonCashBook += h.quantity * h.avgBuyPrice;
+          }
+        }
+        cashToday = acc.currentBalance - nonCashBook;
+      }
+      cashState[acc.id] = cashToday;
+
+      for (var h in _holdings) {
+        if (h.accountId == acc.id && h.asset?.type != 'fiat') {
+          holdingsState[acc.id]![h.assetId] = h.quantity;
+        }
+      }
+    }
+
+    final List<double> monthlyValuesInUSD = List.filled(months.length, 0.0);
+
+    // Populate for the last month (today's month) first using current state
+    monthlyValuesInUSD[months.length - 1] = _calculateTotalValueInUSD(
+      targetAccounts,
+      cashState,
+      holdingsState,
+      months.last,
+      assetPriceHistory,
+    );
+
+    // Now go backwards from months.length - 1 down to 1
+    for (int i = months.length - 1; i >= 1; i--) {
+      final monthEnd = months[i];
+      final prevMonthEnd = months[i - 1];
+
+      // Find all events that occurred in this month (date > prevMonthEnd and date <= monthEnd)
+      for (var ev in allEvents) {
+        final evDate = ev is Transaction ? ev.date : (ev as AssetTransaction).executedAt;
+        if (evDate.isAfter(prevMonthEnd) && (evDate.isBefore(monthEnd) || evDate.isAtSameMomentAs(monthEnd))) {
+          if (ev is Transaction) {
+            final accId = ev.accountId;
+            if (cashState.containsKey(accId)) {
+              cashState[accId] = cashState[accId]! - ev.amount;
+            }
+          } else if (ev is AssetTransaction) {
+            final accId = ev.accountId;
+            final assetId = ev.assetId;
+            final txType = ev.type.toLowerCase();
+
+            if (holdingsState.containsKey(accId)) {
+              final accHoldings = holdingsState[accId]!;
+              
+              double qtyChange = 0.0;
+              if (txType == 'buy' || txType == 'dividend_reinvest' || txType == 'reward' || txType == 'split') {
+                qtyChange = ev.quantity;
+              } else if (txType == 'sell') {
+                qtyChange = -ev.quantity;
+              }
+              accHoldings[assetId] = (accHoldings[assetId] ?? 0.0) - qtyChange;
+
+              double cashChange = 0.0;
+              if (txType == 'buy') {
+                cashChange = -ev.quantity * ev.unitPrice;
+              } else if (txType == 'sell') {
+                cashChange = ev.quantity * ev.unitPrice;
+              }
+              cashState[accId] = cashState[accId]! - cashChange;
+            }
+          }
+        }
+      }
+
+      // Safeguard: Ensure no negative quantities or cash balances due to ledger anomalies
+      for (var accId in cashState.keys) {
+        cashState[accId] = math.max(0.0, cashState[accId]!);
+      }
+      for (var accHoldings in holdingsState.values) {
+        for (var assetId in accHoldings.keys) {
+          accHoldings[assetId] = math.max(0.0, accHoldings[assetId]!);
+        }
+      }
+
+      monthlyValuesInUSD[i - 1] = _calculateTotalValueInUSD(
+        targetAccounts,
+        cashState,
+        holdingsState,
+        prevMonthEnd,
+        assetPriceHistory,
+      );
+    }
+
+    final List<FlSpot> spots = [];
+    for (int i = 0; i < months.length; i++) {
+      spots.add(FlSpot(i.toDouble(), monthlyValuesInUSD[i]));
+    }
+
+    if (mounted) {
+      setState(() {
+        _timelineSpots = spots;
+        _timelineDates = months;
+      });
+    }
+  }
+
+  double _calculateTotalValueInUSD(
+    List<Account> targetAccounts,
+    Map<String, double> cashState,
+    Map<String, Map<String, double>> holdingsState,
+    DateTime date,
+    Map<String, List<MapEntry<DateTime, double>>> assetPriceHistory,
+  ) {
+    double totalUSD = 0.0;
+    for (var acc in targetAccounts) {
+      final accId = acc.id;
+      final accCurrency = acc.currency;
+      final accCurrencyPriceInUSD = CurrencyService().getPrice(accCurrency) ?? 1.0;
+
+      final accCash = cashState[accId] ?? 0.0;
+      totalUSD += accCash * accCurrencyPriceInUSD;
+
+      final accHoldings = holdingsState[accId] ?? {};
+      for (var entry in accHoldings.entries) {
+        final assetId = entry.key;
+        final quantity = entry.value;
+        if (quantity <= 0) continue;
+
+        final asset = _findAssetById(assetId);
+        if (asset == null || asset.type == 'fiat') continue;
+
+        final symbol = asset.symbol.toUpperCase();
+        final priceInUSD = _getHistoricalPriceInUSD(symbol, date, assetPriceHistory);
+
+        totalUSD += quantity * priceInUSD;
+      }
+    }
+    return totalUSD;
+  }
+
+  Asset? _findAssetById(String id) {
+    for (var holding in _holdings) {
+      if (holding.assetId == id) return holding.asset;
+    }
+    for (var tx in _transactions) {
+      if (tx.assetId == id) return tx.asset;
+    }
+    return null;
+  }
+
+  double _getHistoricalPriceInUSD(
+    String symbol,
+    DateTime date,
+    Map<String, List<MapEntry<DateTime, double>>> priceHistory,
+  ) {
+    if (symbol == 'USD') return 1.0;
+
+    final history = priceHistory[symbol];
+    final currentPrice = CurrencyService().getPrice(symbol);
+
+    if (history == null || history.isEmpty) {
+      return currentPrice ?? 1.0;
+    }
+
+    MapEntry<DateTime, double>? lastTx;
+    MapEntry<DateTime, double>? nextTx;
+
+    for (var entry in history) {
+      if (entry.key.isBefore(date) || entry.key.isAtSameMomentAs(date)) {
+        lastTx = entry;
+      } else {
+        nextTx = entry;
+        break;
+      }
+    }
+
+    if (lastTx == null) {
+      return history.first.value;
+    }
+
+    if (nextTx == null) {
+      if (currentPrice != null) {
+        final today = DateTime.now();
+        final totalDays = today.difference(lastTx.key).inDays;
+        if (totalDays <= 0) return currentPrice;
+
+        final daysPassed = date.difference(lastTx.key).inDays;
+        final fraction = daysPassed / totalDays;
+        return lastTx.value + (currentPrice - lastTx.value) * fraction;
+      }
+      return lastTx.value;
+    }
+
+    final totalDays = nextTx.key.difference(lastTx.key).inDays;
+    if (totalDays <= 0) return lastTx.value;
+
+    final daysPassed = date.difference(lastTx.key).inDays;
+    final fraction = daysPassed / totalDays;
+    return lastTx.value + (nextTx.value - lastTx.value) * fraction;
+  }
+
+  List<FlSpot> _getFilteredSpots(double mxnRate) {
+    if (_timelineSpots.isEmpty) return [];
+
+    int startIndex = 0;
+    if (_timelineRange == '6M') {
+      startIndex = math.max(0, _timelineSpots.length - 6);
+    } else if (_timelineRange == '3Y') {
+      startIndex = math.max(0, _timelineSpots.length - 36);
+    }
+
+    final filtered = <FlSpot>[];
+    for (int i = startIndex; i < _timelineSpots.length; i++) {
+      final spot = _timelineSpots[i];
+      final yVal = _portfolioCurrency == 'MXN' ? spot.y / mxnRate : spot.y;
+      filtered.add(FlSpot((i - startIndex).toDouble(), yVal));
+    }
+    return filtered;
+  }
+
+  List<DateTime> _getFilteredDates() {
+    if (_timelineDates.isEmpty) return [];
+
+    int startIndex = 0;
+    if (_timelineRange == '6M') {
+      startIndex = math.max(0, _timelineDates.length - 6);
+    } else if (_timelineRange == '3Y') {
+      startIndex = math.max(0, _timelineDates.length - 36);
+    }
+
+    return _timelineDates.sublist(startIndex);
+  }
+
+  Widget _buildTimelineChartCard() {
+    if (_isLoadingTimeline) {
+      return Card(
+        color: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.0),
+          side: const BorderSide(color: Colors.white10, width: 1.0),
+        ),
+        child: const SizedBox(
+          height: 300,
+          child: Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.limeMoss),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final mxnRate = CurrencyService().getPrice('MXN') ?? 0.053;
+    final spots = _getFilteredSpots(mxnRate);
+    final dates = _getFilteredDates();
+
+    if (spots.length < 2) {
+      return Card(
+        color: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.0),
+          side: const BorderSide(color: Colors.white10, width: 1.0),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PORTFOLIO HISTORICAL PERFORMANCE',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 40),
+              const Center(
+                child: Text(
+                  'Not enough historical transaction data to generate timeline.',
+                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Dynamic Y-axis scaling
+    final yValues = spots.map((s) => s.y).toList();
+    final double minYVal = yValues.reduce(math.min);
+    final double maxYVal = yValues.reduce(math.max);
+    final double padding = (maxYVal - minYVal) * 0.15;
+    final double minY = math.max(0.0, minYVal - padding);
+    final double maxY = maxYVal + (padding > 0 ? padding : 100.0);
+    final double yRange = maxY - minY;
+
+    double yInterval = yRange / 4;
+    if (yInterval < 1) yInterval = 1;
+
+    return Card(
+      color: AppColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
+        side: const BorderSide(color: Colors.white10, width: 1.0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'PORTFOLIO HISTORICAL PERFORMANCE',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                Row(
+                  children: [
+                    _buildTimelineRangeChip('6M', '6M'),
+                    const SizedBox(width: 8),
+                    _buildTimelineRangeChip('3Y', '3Y'),
+                    const SizedBox(width: 8),
+                    _buildTimelineRangeChip('ALL', 'ALL'),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 220,
+              child: LineChart(
+                LineChartData(
+                  minY: minY,
+                  maxY: maxY,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: yInterval,
+                    getDrawingHorizontalLine: (value) {
+                      return const FlLine(
+                        color: Colors.white10,
+                        strokeWidth: 1,
+                      );
+                    },
+                  ),
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (touchedSpot) => const Color(0xFF1E1E1E),
+                      tooltipBorder: const BorderSide(color: Colors.white10, width: 1),
+                      tooltipBorderRadius: const BorderRadius.all(Radius.circular(8)),
+                      getTooltipItems: (List<LineBarSpot> touchedSpots) {
+                        return touchedSpots.map((barSpot) {
+                          final index = barSpot.x.toInt();
+                          if (index < 0 || index >= dates.length) return null;
+                          final date = dates[index];
+                          final dateStr = DateFormat('MMMM yyyy').format(date);
+                          final valStr = formatCurrency(barSpot.y);
+                          return LineTooltipItem(
+                            '$dateStr\n',
+                            const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '$valStr $_portfolioCurrency',
+                                style: const TextStyle(
+                                  color: AppColors.limeMoss,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList();
+                      },
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        interval: 1,
+                        getTitlesWidget: (value, meta) {
+                          final int index = value.toInt();
+                          if (index >= 0 && index < dates.length) {
+                            final totalPoints = dates.length;
+                            int showInterval = 1;
+                            if (totalPoints > 12) {
+                              showInterval = (totalPoints / 6).ceil();
+                            } else if (totalPoints > 6) {
+                              showInterval = 2;
+                            }
+
+                            if (index % showInterval == 0 || index == totalPoints - 1) {
+                              final date = dates[index];
+                              return SideTitleWidget(
+                                meta: meta,
+                                space: 8,
+                                child: Text(
+                                  DateFormat('MMM yy').format(date),
+                                  style: const TextStyle(color: Colors.white38, fontSize: 9),
+                                ),
+                              );
+                            }
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: yInterval,
+                        reservedSize: 55,
+                        getTitlesWidget: (value, meta) {
+                          if (value < minY || value > maxY) return const SizedBox.shrink();
+                          return SideTitleWidget(
+                            meta: meta,
+                            space: 8,
+                            child: Text(
+                              _formatCompactCurrency(value),
+                              style: const TextStyle(color: Colors.white38, fontSize: 9),
+                              textAlign: TextAlign.right,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      color: AppColors.limeMoss,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.limeMoss.withOpacity(0.2),
+                            AppColors.limeMoss.withOpacity(0.0),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineRangeChip(String range, String label) {
+    final isSelected = _timelineRange == range;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _timelineRange = range;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.limeMoss : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.limeMoss : Colors.white10,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white70,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 10,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatCompactCurrency(double value) {
+    final prefix = '\$';
+    if (value >= 1000000) {
+      return '$prefix${(value / 1000000).toStringAsFixed(1)}M';
+    } else if (value >= 1000) {
+      return '$prefix${(value / 1000).toStringAsFixed(0)}k';
+    } else {
+      return '$prefix${value.toStringAsFixed(0)}';
+    }
   }
 
   double get _totalPortfolioMarketValue {
@@ -461,6 +1100,9 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
               ),
             ),
           ),
+          const SizedBox(height: 20),
+
+          _buildTimelineChartCard(),
           const SizedBox(height: 20),
 
           const Padding(

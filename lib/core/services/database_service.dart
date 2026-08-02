@@ -113,6 +113,20 @@ class DatabaseService {
     }
   }
 
+  Future<List<Transaction>> fetchAllTransactionsForAccounts(List<String> accountIds) async {
+    try {
+      final response = await _client
+          .from('transactions')
+          .select('*, accounts(name), categories(name, type)')
+          .inFilter('account_id', accountIds)
+          .order('date', ascending: true);
+      return (response as List).map((json) => Transaction.fromJson(json)).toList();
+    } catch (e) {
+      print('Supabase fetchAllTransactionsForAccounts error: $e');
+      rethrow;
+    }
+  }
+
   Future<Transaction> saveTransaction(Transaction tx) async {
     try {
       // Supabase insert/upsert
