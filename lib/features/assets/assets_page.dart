@@ -39,6 +39,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _selectedTxType; // 'buy', 'sell', or null (All)
+  final Set<String> _collapsedAccounts = {};
 
   @override
   void initState() {
@@ -897,6 +898,31 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
     return grouped;
   }
 
+  List<MapEntry<String, List<Holding>>> get _sortedHoldingsByAccount {
+    final grouped = _holdingsByAccount;
+    final entries = grouped.entries.toList();
+    entries.sort((a, b) {
+      final aTotalUSD = a.value.fold<double>(
+        0.0,
+        (sum, h) {
+          final symbol = h.asset?.symbol ?? '';
+          final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? h.avgBuyPrice;
+          return sum + (h.quantity * currentPriceInUSD);
+        },
+      );
+      final bTotalUSD = b.value.fold<double>(
+        0.0,
+        (sum, h) {
+          final symbol = h.asset?.symbol ?? '';
+          final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? h.avgBuyPrice;
+          return sum + (h.quantity * currentPriceInUSD);
+        },
+      );
+      return bTotalUSD.compareTo(aTotalUSD); // Descending order
+    });
+    return entries;
+  }
+
   List<AssetTransaction> get _filteredTransactions {
     return _transactions.where((tx) {
       final matchesSearch = _searchQuery.isEmpty ||
@@ -1118,7 +1144,7 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
           ),
 
           // Grouped Accounts & Holdings
-          ...groupedHoldings.entries.map((entry) {
+          ..._sortedHoldingsByAccount.map((entry) {
             final accountName = entry.key;
             final accountHoldings = entry.value;
             final accountTotalCost = accountHoldings.fold<double>(
@@ -1139,10 +1165,13 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
               },
             );
 
+            final isCollapsed = _collapsedAccounts.contains(accountName);
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Card(
                 color: AppColors.card,
+                clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16.0),
                   side: const BorderSide(color: Colors.white10, width: 1.0),
@@ -1151,195 +1180,213 @@ class AssetsPageState extends State<AssetsPage> with SingleTickerProviderStateMi
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Account Header Panel
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF141414),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16.0),
-                          topRight: Radius.circular(16.0),
+                    Material(
+                      color: const Color(0xFF141414),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (isCollapsed) {
+                              _collapsedAccounts.remove(accountName);
+                            } else {
+                              _collapsedAccounts.add(accountName);
+                            }
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.account_balance_outlined, color: AppColors.limeMoss, size: 20),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    accountName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        formatCurrency(accountTotalMarket),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Book: ${formatCurrency(accountTotalCost)}',
+                                        style: const TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Icon(
+                                    isCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                                    color: Colors.white54,
+                                    size: 20,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.account_balance_outlined, color: AppColors.limeMoss, size: 20),
-                              const SizedBox(width: 10),
-                              Text(
-                                accountName,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                formatCurrency(accountTotalMarket),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Book: ${formatCurrency(accountTotalCost)}',
-                                style: const TextStyle(
-                                  color: Colors.white38,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                       ),
                     ),
                     // Holdings List inside Account Card
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: accountHoldings.length,
-                      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1.0),
-                      itemBuilder: (context, index) {
-                        final holding = accountHoldings[index];
-                        final assetName = holding.asset?.name ?? 'Unknown Asset';
-                        final symbol = holding.asset?.symbol ?? 'ASSET';
-                        final type = holding.asset?.type ?? 'other';
-                        
-                        // Current price in account currency
-                        final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
-                        final account = _getAccountById(holding.accountId);
-                        final accountCurrency = account?.currency ?? 'USD';
-                        final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
-                        final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
+                    if (!isCollapsed)
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: accountHoldings.length,
+                        separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1.0),
+                        itemBuilder: (context, index) {
+                          final holding = accountHoldings[index];
+                          final assetName = holding.asset?.name ?? 'Unknown Asset';
+                          final symbol = holding.asset?.symbol ?? 'ASSET';
+                          final type = holding.asset?.type ?? 'other';
+                          
+                          // Current price in account currency
+                          final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
+                          final account = _getAccountById(holding.accountId);
+                          final accountCurrency = account?.currency ?? 'USD';
+                          final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
+                          final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
 
-                        final bookValue = holding.quantity * holding.avgBuyPrice;
-                        final marketValue = holding.quantity * currentPriceInAccountCurrency;
-                        final gainLoss = marketValue - bookValue;
-                        final gainLossPercent = bookValue > 0 ? (gainLoss / bookValue) * 100 : 0.0;
+                          final bookValue = holding.quantity * holding.avgBuyPrice;
+                          final marketValue = holding.quantity * currentPriceInAccountCurrency;
+                          final gainLoss = marketValue - bookValue;
+                          final gainLossPercent = bookValue > 0 ? (gainLoss / bookValue) * 100 : 0.0;
 
-                        final isProfit = gainLoss >= 0;
-                        final trendColor = isProfit ? AppColors.limeMoss : AppColors.cinnabar;
-                        final trendSign = isProfit ? '+' : '';
+                          final isProfit = gainLoss >= 0;
+                          final trendColor = isProfit ? AppColors.limeMoss : AppColors.cinnabar;
+                          final trendSign = isProfit ? '+' : '';
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-                          child: Row(
-                            children: [
-                              // Asset Identifiers
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          symbol,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+                            child: Row(
+                              children: [
+                                // Asset Identifiers
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            symbol,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
                                           ),
+                                          const SizedBox(width: 8),
+                                          _buildTypeBadge(type),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        assetName,
+                                        style: const TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 12,
                                         ),
-                                        const SizedBox(width: 8),
-                                        _buildTypeBadge(type),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      assetName,
-                                      style: const TextStyle(
-                                        color: Colors.white38,
-                                        fontSize: 12,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
 
-                              // Position details (Quantity, Average Price, Current Price)
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${holding.quantity.toStringAsFixed(3)} units',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
+                                // Position details (Quantity, Average Price, Current Price)
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${holding.quantity.toStringAsFixed(3)} units',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Avg: ${formatCurrency(holding.avgBuyPrice)}',
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Avg: ${formatCurrency(holding.avgBuyPrice)}',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 11,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Price: ${formatCurrency(currentPriceInAccountCurrency)}',
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Price: ${formatCurrency(currentPriceInAccountCurrency)}',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
 
-                              // Financial value details (Market value, Book cost, Profit/Loss)
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      formatCurrency(marketValue),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
+                                // Financial value details (Market value, Book cost, Profit/Loss)
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        formatCurrency(marketValue),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Book: ${formatCurrency(bookValue)}',
-                                      style: const TextStyle(
-                                        color: Colors.white38,
-                                        fontSize: 11,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Book: ${formatCurrency(bookValue)}',
+                                        style: const TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 11,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '$trendSign${formatCurrency(gainLoss)} ($trendSign${gainLossPercent.toStringAsFixed(1)}%)',
-                                      style: TextStyle(
-                                        color: trendColor,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '$trendSign${formatCurrency(gainLoss)} ($trendSign${gainLossPercent.toStringAsFixed(1)}%)',
+                                        style: TextStyle(
+                                          color: trendColor,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
