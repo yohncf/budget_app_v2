@@ -282,6 +282,79 @@ class DatabaseService {
     }
   }
 
+  /// Marks a recurring budget as paid by advancing its next_due_date,
+  /// adjusting its running_amount according to the user's budget_end_date rules,
+  /// and resetting its budget_end_date to the last day of the new next_due_date's month.
+  Future<void> markRecurringBudgetAsPaid(RecurringBudget budget) async {
+    try {
+      final now = DateTime.now();
+      // Generate next due date based on the date the checkmark was clicked
+      final newDueDate = advanceDateByFrequency(now, budget.frequency, budget.interval);
+      final newDueDateStr = newDueDate.toIso8601String().split('T').first;
+
+      // Determine new budget_end_date: last day of the month of the new next_due_date
+      final newBudgetEndDate = DateTime(newDueDate.year, newDueDate.month + 1, 0);
+      final newBudgetEndDateStr = newBudgetEndDate.toIso8601String().split('T').first;
+
+      final updateData = <String, dynamic>{
+        'next_due_date': newDueDateStr,
+        'budget_end_date': newBudgetEndDateStr,
+      };
+
+      // Reset running_amount to 0.0 ONLY if budget_end_date is due in the current month.
+      // If it ends in another month, we keep the running_amount as is.
+      final bool shouldReset = budget.budgetEndDate == null || 
+          (budget.budgetEndDate!.year == now.year && budget.budgetEndDate!.month == now.month);
+      
+      if (shouldReset) {
+        updateData['running_amount'] = 0.0;
+      }
+
+      await _client
+          .from('recurring_budget')
+          .update(updateData)
+          .eq('id', budget.id);
+    } catch (e) {
+      print('Supabase markRecurringBudgetAsPaid error: $e');
+      rethrow;
+    }
+  }
+
+  /// Manually edits/updates the next_due_date of a recurring budget in Supabase.
+  Future<void> updateRecurringBudgetNextDueDate(String budgetId, DateTime newDueDate) async {
+    try {
+      final dueDateStr = newDueDate.toIso8601String().split('T').first;
+      await _client
+          .from('recurring_budget')
+          .update({'next_due_date': dueDateStr})
+          .eq('id', budgetId);
+    } catch (e) {
+      print('Supabase updateRecurringBudgetNextDueDate error: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches all transactions of a specific calendar month that belong to a category name.
+  Future<List<Transaction>> fetchTransactionsByCategoryAndMonth(String categoryName, DateTime month) async {
+    try {
+      final startDate = DateTime(month.year, month.month, 1);
+      final endDate = DateTime(month.year, month.month + 1, 1).subtract(const Duration(milliseconds: 1));
+      
+      final response = await _client
+          .from('transactions')
+          .select('*, accounts(name), categories!inner(name, type)')
+          .eq('categories.name', categoryName)
+          .gte('date', startDate.toIso8601String())
+          .lte('date', endDate.toIso8601String())
+          .order('date', ascending: false);
+
+      return (response as List).map((json) => Transaction.fromJson(json)).toList();
+    } catch (e) {
+      print('Supabase fetchTransactionsByCategoryAndMonth error: $e');
+      rethrow;
+    }
+  }
+
   /// Updates running_amount and advances next_due_date for an active recurring budget
   /// whenever an expense transaction matching the recurring category is created, updated, or deleted.
   Future<void> processExpenseForRecurringBudget(Transaction tx, {Transaction? oldTx, bool isDelete = false}) async {

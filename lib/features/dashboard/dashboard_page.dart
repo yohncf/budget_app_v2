@@ -19,7 +19,7 @@ class DashboardPageState extends State<DashboardPage> {
   final _databaseService = DatabaseService();
   
   List<Account> _accounts = [];
-  List<Transaction> _transactions = [];
+  List<Transaction> _annualExpensesTransactions = [];
   List<Category> _categories = [];
 
   // Holds transaction history fetched from the database for the chart window (max 60 days).
@@ -27,10 +27,12 @@ class DashboardPageState extends State<DashboardPage> {
   List<RecurringBudget> _currentMonthRecurringBudgets = [];
 
   // Chart visualization mode: 'cumulative' shows running total trends, 'daily' shows discrete daily sums.
-  String _chartMode = 'cumulative';
+  // DEFAULT: 'daily' mode as per user request.
+  String _chartMode = 'daily';
 
   // Chart time range: '60days' displays last 60 days, 'currentMonth' filters to current calendar month.
-  String _chartRange = '60days';
+  // DEFAULT: 'currentMonth' (This Month) as per user request.
+  String _chartRange = 'currentMonth';
 
   bool _isLoading = true;
   bool _showHoldingInChecking = false;
@@ -47,7 +49,6 @@ class DashboardPageState extends State<DashboardPage> {
     });
     try {
       final accounts = await _databaseService.fetchAccounts();
-      final transactions = await _databaseService.fetchTransactions(limit: 30, offset: 0);
       final categories = await _databaseService.fetchCategories();
       
       final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
@@ -58,13 +59,17 @@ class DashboardPageState extends State<DashboardPage> {
       );
 
       final currentMonthRecurring = await _databaseService.fetchCurrentMonthRecurringBudgets();
+      
+      // Fetch annual expenses for the current month
+      final now = DateTime.now();
+      final annualExpenses = await _databaseService.fetchTransactionsByCategoryAndMonth('Annual Expenses', now);
 
       setState(() {
         _accounts = accounts.where((acc) => acc.status != 'archived').toList();
-        _transactions = transactions;
         _chartTransactions = chartTransactions;
         _categories = categories;
         _currentMonthRecurringBudgets = currentMonthRecurring;
+        _annualExpensesTransactions = annualExpenses;
       });
     } catch (e) {
       print('Error loading dashboard data: $e');
@@ -78,6 +83,97 @@ class DashboardPageState extends State<DashboardPage> {
   /// Formats a double amount into standard currency notation with commas: e.g., "$1,234,567.89".
   String _formatCurrency(double amount) {
     return formatCurrency(amount);
+  }
+
+  /// Calculates the total sum of absolute transaction values of "Annual Expenses" this month.
+  double get _totalAnnualExpenses {
+    return _annualExpensesTransactions.fold(0.0, (sum, tx) => sum + tx.amount.abs());
+  }
+
+  /// Reloads only the recurring budgets list in the background to update the Expected Expenses card
+  /// without triggering a full page loader spinner.
+  Future<void> _refreshRecurringBudgets() async {
+    try {
+      final currentMonthRecurring = await _databaseService.fetchCurrentMonthRecurringBudgets();
+      setState(() {
+        _currentMonthRecurringBudgets = currentMonthRecurring;
+      });
+    } catch (e) {
+      print('Error refreshing recurring budgets: $e');
+    }
+  }
+
+  /// Marks a recurring budget as paid, advancing its next due date and recalculating budget_end_date.
+  Future<void> _markAsPaid(RecurringBudget budget) async {
+    try {
+      await _databaseService.markRecurringBudgetAsPaid(budget);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${budget.categoryName ?? "Expense"} marked as paid! Next due date advanced.'),
+            backgroundColor: AppColors.limeMoss,
+          ),
+        );
+      }
+      await _refreshRecurringBudgets();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error marking as paid: $e'),
+            backgroundColor: AppColors.cinnabar,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Opens a Date Picker for the user to edit the next due date of a recurring budget.
+  Future<void> _selectNextDueDate(RecurringBudget budget, BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: budget.nextDueDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.limeMoss,
+              onPrimary: Colors.black,
+              surface: AppColors.card,
+              onSurface: Colors.white,
+            ),
+            dialogBackgroundColor: AppColors.background,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      try {
+        await _databaseService.updateRecurringBudgetNextDueDate(budget.id, picked);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Next due date updated successfully!'),
+              backgroundColor: AppColors.limeMoss,
+            ),
+          );
+        }
+        await _refreshRecurringBudgets();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error updating next due date: $e'),
+              backgroundColor: AppColors.cinnabar,
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// Determines the card title for the checking account summary, dynamically adding "+ Holding" if toggled.
@@ -334,12 +430,14 @@ class DashboardPageState extends State<DashboardPage> {
             const SizedBox(height: 32),
             CurrentMonthRecurringExpensesCard(
               recurringBudgets: _currentMonthRecurringBudgets,
+              onPaid: _markAsPaid,
+              onEditDueDate: _selectNextDueDate,
             ),
             const SizedBox(height: 32),
 
-            // Recent activity header
+            // Annual activity header
             Text(
-              'Recent Transactions',
+              'Annual Expenses',
               style: theme.textTheme.titleLarge?.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -347,60 +445,115 @@ class DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(height: 16),
 
-            // Short Transaction List
+            // Annual Expenses Card
             Container(
               decoration: BoxDecoration(
                 color: AppColors.card,
                 borderRadius: BorderRadius.circular(24.0),
                 border: Border.all(color: Colors.transparent, width: 1),
               ),
-              child: _transactions.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: Center(
-                        child: Text(
-                          'No recent transactions found.',
-                          style: TextStyle(color: Colors.white54),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Summary Banner
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Total Spent This Month',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatCurrency(_totalAnnualExpenses),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _transactions.take(5).length,
-                      separatorBuilder: (context, index) => const Divider(color: Colors.white12, height: 1),
-                      itemBuilder: (context, index) {
-                        final tx = _transactions[index];
-                        final isIncome = tx.amount > 0;
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.background,
-                            child: Icon(
-                              isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-                              color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
-                            ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                           ),
-                          title: Text(
-                            tx.description ?? 'Unlabeled Transaction',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            '${tx.accountName ?? "Account"} • ${tx.categoryName ?? "Category"}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                          trailing: Text(
-                            '${isIncome ? "+ " : ""}${formatCurrency(tx.amount)}',
-                            style: TextStyle(
-                              color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
+                          child: Text(
+                            '${_annualExpensesTransactions.length} Transactions',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              fontSize: 15,
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
+                  ),
+                  const Divider(color: Colors.white12, height: 1),
+                  _annualExpensesTransactions.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: Center(
+                            child: Text(
+                              'No transactions found for "Annual Expenses" this month.',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _annualExpensesTransactions.length,
+                          separatorBuilder: (context, index) => const Divider(color: Colors.white12, height: 1),
+                          itemBuilder: (context, index) {
+                            final tx = _annualExpensesTransactions[index];
+                            final isIncome = tx.amount > 0;
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.background,
+                                child: Icon(
+                                  isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+                                  color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
+                                ),
+                              ),
+                              title: Text(
+                                tx.description ?? 'Unlabeled Transaction',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                '${tx.accountName ?? "Account"} • ${DateFormat('MMM dd, yyyy').format(tx.date)}',
+                                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              ),
+                              trailing: Text(
+                                '${isIncome ? "+ " : ""}${formatCurrency(tx.amount)}',
+                                style: TextStyle(
+                                  color: isIncome ? AppColors.limeMoss : AppColors.cinnabar,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ],
+              ),
             ),
+
+
           ],
         ),
       ),
@@ -1217,10 +1370,14 @@ class _CategoryExpenseChartCardState extends State<CategoryExpenseChartCard> {
 /// Positioned directly below the "Category Expenses" card on the Dashboard.
 class CurrentMonthRecurringExpensesCard extends StatelessWidget {
   final List<RecurringBudget> recurringBudgets;
+  final Function(RecurringBudget) onPaid;
+  final Function(RecurringBudget, BuildContext) onEditDueDate;
 
   const CurrentMonthRecurringExpensesCard({
     super.key,
     required this.recurringBudgets,
+    required this.onPaid,
+    required this.onEditDueDate,
   });
 
   Color _parseHexColor(String? hexString, {Color fallback = AppColors.limeMoss}) {
@@ -1314,15 +1471,13 @@ class CurrentMonthRecurringExpensesCard extends StatelessWidget {
               itemBuilder: (context, index) {
                 final budget = recurringBudgets[index];
                 final categoryColor = _parseHexColor(budget.categoryColorHex);
-                final ratio = budget.budgetProgressRatio;
-                final isOverBudget = budget.runningAmount > budget.budget;
-                final progressColor = isOverBudget
-                    ? AppColors.cinnabar
-                    : (budget.runningAmount == 0 ? Colors.white24 : categoryColor);
 
                 final dueDateStr = budget.nextDueDate != null
                     ? DateFormat('MMM dd').format(budget.nextDueDate!)
                     : 'N/A';
+
+                final isOverBudget = budget.runningAmount > budget.budget;
+                final expenseColor = isOverBudget ? AppColors.cinnabar : Colors.white70;
 
                 return Container(
                   padding: const EdgeInsets.all(16.0),
@@ -1330,14 +1485,14 @@ class CurrentMonthRecurringExpensesCard extends StatelessWidget {
                     color: AppColors.background,
                     borderRadius: BorderRadius.circular(16.0),
                     border: Border.all(
-                      color: isOverBudget ? AppColors.cinnabar.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.05),
+                      color: isOverBudget ? AppColors.cinnabar.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.05),
                       width: 1,
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header Row: Category avatar & name vs Spent amount & percentage
+                      // Top Row: Avatar & category details vs Paid/Edit Actions
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1365,64 +1520,96 @@ class CurrentMonthRecurringExpensesCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        budget.formattedFrequencyInterval,
-                                        style: const TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '• Due: $dueDateStr',
-                                        style: TextStyle(
-                                          color: isOverBudget ? AppColors.cinnabar : AppColors.limeMoss,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    budget.formattedFrequencyInterval,
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                '${formatCurrency(budget.runningAmount)} / ${formatCurrency(budget.budget)}',
-                                style: TextStyle(
-                                  color: isOverBudget ? AppColors.cinnabar : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.check_circle_outline,
+                                  color: AppColors.limeMoss,
+                                  size: 24,
                                 ),
+                                tooltip: 'Mark as Paid',
+                                onPressed: () => onPaid(budget),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${(ratio * 100).toStringAsFixed(0)}% spent',
-                                style: TextStyle(
-                                  color: isOverBudget ? AppColors.cinnabar : Colors.white54,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                              PopupMenuButton<String>(
+                                icon: const Icon(
+                                  Icons.more_vert,
+                                  color: Colors.white54,
+                                  size: 20,
                                 ),
+                                tooltip: 'Options',
+                                onSelected: (val) {
+                                  if (val == 'edit_due_date') {
+                                    onEditDueDate(budget, context);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem<String>(
+                                    value: 'edit_due_date',
+                                    child: Text('Edit next due date'),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Progress Bar: Visual representation of running_amount vs budget ceiling
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: ratio.clamp(0.0, 1.0),
-                          minHeight: 8,
-                          backgroundColor: Colors.white10,
-                          valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                        ),
+                      Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
+                      const SizedBox(height: 12),
+                      // Bottom Row: Due Date vs Expenses Incurred vs Running Amount
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today,
+                                color: Colors.white54,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Due: $dueDateStr',
+                                style: const TextStyle(
+                                  color: AppColors.limeMoss,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.receipt_long,
+                                color: isOverBudget ? AppColors.cinnabar : Colors.white54,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${formatCurrency(budget.runningAmount)} spent of ${formatCurrency(budget.budget)}',
+                                style: TextStyle(
+                                  color: expenseColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),

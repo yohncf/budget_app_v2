@@ -163,15 +163,43 @@ The `recurring_budget` system manages recurring category spending limits, execut
 2. **Cycle Rollover Check (`_checkAndRolloverRecurringBudgetCycle`)**:
    - When fetching recurring budgets, the service evaluates if `DateTime.now()` has advanced into a new cycle period relative to `next_due_date`.
    - If the previous cycle has expired, `running_amount` is automatically reset to `0.0` in Supabase.
+3. **Manual Checkmark Verification (Mark as Paid)**:
+   - When a user clicks the checkmark on a recurring expense, it is considered paid.
+   - The system generates the new `next_due_date` using `DateTime.now()` as the base date, advanced by the configured interval and frequency.
+   - The `running_amount` is reset to `0.0` **only** if the `budget_end_date` is due in the current calendar month. If the `budget_end_date` ends in another month, the `running_amount` is preserved.
+   - The `budget_end_date` is then updated to be the last day of the month of the newly generated `next_due_date`.
+   - **Background Refresh UX**: To prevent a jarring full-page reload, the dashboard only updates the specific recurring budgets list asynchronously in the background (`_refreshRecurringBudgets`) instead of querying all accounts and showing a loading spinner.
+4. **Manual Due Date Editing**:
+   - The user can select "Edit next due date" from the 3-dots popup menu on the card, opening a date picker to manually set a new next due date in Supabase.
+   - Updates the user interface instantly using the same background refresh pipeline.
 
 ### Dashboard UI Section (`CurrentMonthRecurringExpensesCard`)
 * **Location**: Positioned directly below the "Category Expenses" card (`CategoryExpenseChartCard`) on the Dashboard.
-* **Filtering**: Only displays active recurring budgets where `next_due_date` matches the current calendar month and year (`isDueInMonth(targetMonth)`).
+* **Filtering**: Only displays active recurring budgets where `next_due_date` matches the current calendar month and year. This ensures cards are only visible during the month of their due date.
 * **UI Elements**:
-  - Category icon, name, and color badge.
-  - Formatted frequency & interval description (e.g., *"Every Month"*, *"Every 2 Months"*).
-  - Next due date indicator (e.g., *"Due Jul 25"*).
-  - Spending progress: `${running_amount} / ${budget}` display with spend percentage.
-  - Linear progress bar dynamically styled in green (`AppColors.limeMoss`), muted gray, or red (`AppColors.cinnabar`) when over budget.
+  - **Two-Row Distribution Layout**:
+    - **Top Row**: Contains the Category icon, Category name, and frequency description (e.g. *"Every Month"*), alongside the action buttons (green checkmark for "Mark as Paid" and 3-dots for editing options).
+    - **Bottom Row**: Separated by a subtle divider, contains the next due date (e.g. *"Due Aug 15"*) on the left, and the incurred expenses vs running budget limit (e.g. *"$250.00 spent of $1,000.00"*) on the right.
+  - **Budget Overrun Indicator**: If incurred expenses exceed the budget limit, the amount spent text and the receipt icon turn red (`AppColors.cinnabar`) for visual feedback.
+  - *Note*: The linear progress bar has been removed in favor of this distributed text presentation.
+
+---
+
+## 7. Cash Flow Overview Chart Default Settings
+* **Location**: The line chart container on the Dashboard (`DashboardPage`).
+* **Defaults**:
+  - Time Range default: **This Month** (`currentMonth`).
+  - Visualization mode default: **Daily** (`daily`).
+
+---
+
+## 8. Annual Expenses Summary & Transactions
+* **Location**: Replaces the "Recent Transactions" section at the bottom of the Dashboard page (`DashboardPage`).
+* **Logic**:
+  - Automatically queries all transactions matching the current calendar month that are assigned the category **"Annual Expenses"**.
+  - Displays a **Summary Banner** showing:
+    - **Total Spent This Month**: Sum of the absolute values of the month's matching transactions.
+    - **Transaction Count**: The number of matching transactions.
+  - Lists all of the matching transactions with their description, account name, date (formatted `MMM dd, yyyy`), and amount.
 
 
