@@ -116,6 +116,21 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
           _isRecurring = false;
           _recurringId = null;
         }
+
+        // If on Income tab and selected account is a credit card, but chosen category is not Reimbursement, reset account.
+        if (_tabController.index == 1 && _accountId != null) {
+          final currentAcc = _accounts.firstWhere(
+            (acc) => acc.id == _accountId,
+            orElse: () => Account(id: '', name: '', type: '', institution: '', currency: '', currentBalance: 0, limit: 0, accountGroup: '', status: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          );
+          if (currentAcc.accountGroup == 'credit') {
+            final isReimbursement = match.type == 'reimbursement' || match.name.toLowerCase().contains('reimbursement');
+            if (!isReimbursement) {
+              _accountId = null;
+              _accountSearchController.clear();
+            }
+          }
+        }
       });
     });
 
@@ -324,10 +339,37 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
     }
   }
 
+  /// Filters available accounts based on the active tab index:
+  /// - Tab 0 (Expense): Credit card accounts and checking accounts.
+  /// - Tab 1 (Income): Liquid assets and retirement accounts by default.
+  ///   SPECIAL RULE: If a 'reimbursement' category is selected or typed (e.g. Cashback/Reimbursement),
+  ///   credit card accounts are also enabled so reimbursements/cashback can be credited directly to credit accounts.
+  /// - Tab 2 (Transfer): All accounts.
   List<Account> _getFilteredAccounts(int tabIndex) {
     if (tabIndex == 0) {
       return _accounts.where((acc) => acc.accountGroup == 'credit' || acc.type == 'checking').toList();
     } else if (tabIndex == 1) {
+      bool isReimbursement = false;
+      if (_categoryId != null) {
+        final cat = _categories.firstWhere(
+          (c) => c.id == _categoryId,
+          orElse: () => Category(id: '', name: '', type: '', createdAt: DateTime.now()),
+        );
+        if (cat.type == 'reimbursement' || cat.name.toLowerCase().contains('reimbursement')) {
+          isReimbursement = true;
+        }
+      } else {
+        final text = _categorySearchController.text.trim().toLowerCase();
+        if (text.contains('reimbursement')) {
+          isReimbursement = true;
+        }
+      }
+
+      // Allow credit card accounts when recording a reimbursement/cashback under Income
+      if (isReimbursement) {
+        return _accounts.where((acc) => acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'retirement' || acc.accountGroup == 'credit').toList();
+      }
+
       return _accounts.where((acc) => acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'retirement').toList();
     } else {
       return _accounts;

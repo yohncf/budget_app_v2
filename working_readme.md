@@ -202,4 +202,18 @@ The `recurring_budget` system manages recurring category spending limits, execut
     - **Transaction Count**: The number of matching transactions.
   - Lists all of the matching transactions with their description, account name, date (formatted `MMM dd, yyyy`), and amount.
 
+---
+
+## 9. Transaction Modal Account Filtering & Credit Card Reimbursements
+
+### Overview
+In the Transaction Modal (`AddTransactionBottomSheet` in `lib/features/transactions/add_transaction_bottom_sheet.dart`), available accounts in the Account dropdown are dynamically filtered based on the active tab:
+* **Expense Tab (`tabIndex == 0`)**: Displays `credit` card accounts and `checking` accounts. Amounts are stored as negative numbers (outflows).
+* **Income Tab (`tabIndex == 1`)**:
+  - **Default**: Displays `liquid_assets` and `retirement` accounts. Credit card accounts are hidden by default to prevent logging standard income against credit lines.
+  - **Reimbursement Special Rule**: When a category of type `'reimbursement'` or matching the name `"Reimbursement"` (e.g., Cashback, refunds, expense returns) is selected or typed in the Category search box, credit card accounts (`accountGroup == 'credit'`) are dynamically enabled. This allows logging cashback credits or reimbursements directly to credit cards (which decreases the credit card debt/balance).
+  - **Auto-Reset Safeguard**: If a credit card account is selected and the category is subsequently changed to a non-reimbursement income category (e.g. Salary), the account field is automatically reset to prevent invalid entries.
+* **Transfer Tab (`tabIndex == 2`)**: Displays all active accounts.
+
+
 

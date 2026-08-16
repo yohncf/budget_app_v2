@@ -150,3 +150,14 @@ The four summary cards at the top of the Dashboard are structured as follows:
     *   Asset values are cached in USD and dynamically converted to the account's base currency code on the Assets Page:
         $$\text{Current Price (Account Local)} = \frac{\text{USD Cached Price}}{\text{Account Base Currency Rate (USD)}}$$
 
+---
+
+### 8. Transaction Modal Account Filtering & Credit Card Reimbursements
+* **Expense Tab (`tabIndex == 0`)**: Displays `credit` card accounts and `checking` accounts. Amounts are stored as negative numbers (outflows).
+* **Income Tab (`tabIndex == 1`)**:
+  - **Default**: Displays `liquid_assets` and `retirement` accounts. Credit card accounts are hidden by default to prevent logging standard income against credit lines.
+  - **Reimbursement Special Rule**: When a category of type `'reimbursement'` or matching the name `"Reimbursement"` (e.g., Cashback, refunds, expense returns) is selected or typed in the Category search box, credit card accounts (`accountGroup == 'credit'`) are dynamically enabled. This allows logging cashback credits or reimbursements directly to credit cards (which decreases credit card debt/balance).
+  - **Auto-Reset Safeguard**: If a credit card account is selected and the category is subsequently changed to a non-reimbursement income category (e.g. Salary), the account field is automatically reset to prevent invalid entries.
+* **Transfer Tab (`tabIndex == 2`)**: Displays all active accounts.
+
+
