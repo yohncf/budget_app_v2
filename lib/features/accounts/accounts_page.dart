@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:budget_app_v2/core/config/app_colors.dart';
 import '../../core/models/models.dart';
 import '../../core/services/database_service.dart';
+import '../../core/services/currency_service.dart';
 import '../../core/utils/currency_formatter.dart';
 
 
@@ -155,12 +156,28 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
 
     try {
       final snapshotDate = DateTime.now();
+      final mxnPriceInUsd = CurrencyService().getPrice('MXN') ?? 0.053;
       final snapshots = activeAccounts.map((acc) {
+        double balanceMxn;
+        double balanceUsd;
+        final currency = acc.currency.trim().toUpperCase();
+        if (currency == 'USD') {
+          balanceUsd = acc.currentBalance;
+          balanceMxn = acc.currentBalance / mxnPriceInUsd;
+        } else if (currency == 'MXN') {
+          balanceMxn = acc.currentBalance;
+          balanceUsd = acc.currentBalance * mxnPriceInUsd;
+        } else {
+          final accPriceInUsd = CurrencyService().getPrice(currency) ?? 1.0;
+          balanceUsd = acc.currentBalance * accPriceInUsd;
+          balanceMxn = balanceUsd / mxnPriceInUsd;
+        }
         return AccountSnapshot(
           id: _generateUuid(),
           accountId: acc.id,
           snapshotDate: snapshotDate,
-          balance: acc.currentBalance,
+          balanceMxn: balanceMxn,
+          balanceUsd: balanceUsd,
         );
       }).toList();
 

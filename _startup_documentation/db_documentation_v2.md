@@ -100,7 +100,8 @@ This document outlines the architecture, relationships, constraints, and operati
 | `id` | `UUID` | `PRIMARY KEY` | Unique log identity token. |
 | `account_id` | `UUID` | `NOT NULL`, `REF` | Target account (`ON DELETE CASCADE`). |
 | `snapshot_date` | `TIMESTAMPTZ`| `NOT NULL` | Historical moment node representing balances. |
-| `balance` | `FLOAT8` | `NOT NULL` | Exact balance on target date. |
+| `balance_mxn` | `FLOAT8` | `NOT NULL` | Balance value in Mexican Pesos (MXN) on target date. |
+| `balance_usd` | `FLOAT8` | `NOT NULL` | Balance value in US Dollars (USD) on target date. |
 
 ### 7. `holdings`
 | Column | Data Type | Constraint | Explanation / Rules |

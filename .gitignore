@@ -52,3 +52,7 @@ lib/core/config/api_config.dart
 
 # Firebase cache/config
 .firebase/
+
+# Local scratch directory
+scratch/
+

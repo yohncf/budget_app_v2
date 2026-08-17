@@ -253,13 +253,15 @@ class AccountSnapshot {
   final String id;
   final String accountId;
   final DateTime snapshotDate;
-  final double balance;
+  final double balanceMxn;
+  final double balanceUsd;
 
   AccountSnapshot({
     required this.id,
     required this.accountId,
     required this.snapshotDate,
-    required this.balance,
+    required this.balanceMxn,
+    required this.balanceUsd,
   });
 
   factory AccountSnapshot.fromJson(Map<String, dynamic> json) {
@@ -267,7 +269,8 @@ class AccountSnapshot {
       id: json['id'] as String,
       accountId: json['account_id'] as String,
       snapshotDate: DateTime.parse(json['snapshot_date'] as String),
-      balance: (json['balance'] as num).toDouble(),
+      balanceMxn: (json['balance_mxn'] ?? json['balance'] as num).toDouble(),
+      balanceUsd: (json['balance_usd'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -276,7 +279,8 @@ class AccountSnapshot {
       'id': id,
       'account_id': accountId,
       'snapshot_date': snapshotDate.toIso8601String(),
-      'balance': balance,
+      'balance_mxn': balanceMxn,
+      'balance_usd': balanceUsd,
     };
   }
 }
