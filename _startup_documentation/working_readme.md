@@ -160,4 +160,13 @@ The four summary cards at the top of the Dashboard are structured as follows:
   - **Auto-Reset Safeguard**: If a credit card account is selected and the category is subsequently changed to a non-reimbursement income category (e.g. Salary), the account field is automatically reset to prevent invalid entries.
 * **Transfer Tab (`tabIndex == 2`)**: Displays all active accounts.
 
+---
 
+### 9. Capital & Retirement Account Total Value (Assets + Cash)
+In the Accounts page (`AccountsPage` in `lib/features/accounts/accounts_page.dart`), accounts under the **"Capital and retirement"** section display their combined total value:
+* **Total Account Value**: Computed as today's market value of all non-fiat asset positions (stocks, ETFs, crypto) held in that custody account plus the cash (USD/fiat) balance (`currentBalance`).
+* **Dynamic Asset Pricing**: Uses real-time cached rates from `CurrencyService` (`CurrencyService().getPrice(symbol)` with fallback to `avgBuyPrice`) converted into the account's base currency.
+* **Cash Subtitle & Tooltip**: When both cash and asset holdings are present, the card subtitle displays the base currency and cash balance (e.g. `USD • Cash: $500.00`), and hovering reveals a detailed tooltip breaking down cash vs. assets.
+* **Snapshots & Archiving Consistency**:
+  - `Create Snapshot` records the full combined value (stocks + cash) for capital and retirement accounts in `account_snapshots`.
+  - Archiving validation ensures capital accounts with remaining asset holdings cannot be archived until fully liquidated/reconciled.

@@ -51,6 +51,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
   late TabController _tabController;
 
   List<Account> _accounts = [];
+  List<Holding> _holdings = [];
   bool _isLoading = true;
 
   @override
@@ -71,9 +72,17 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
       _isLoading = true;
     });
     try {
-      final list = await _databaseService.fetchAccounts();
+      await CurrencyService().initialize();
+      final accountsFuture = _databaseService.fetchAccounts();
+      final holdingsFuture = _databaseService.fetchHoldings().catchError((e) {
+        print('Error loading holdings in AccountsPage: $e');
+        return <Holding>[];
+      });
+
+      final results = await Future.wait([accountsFuture, holdingsFuture]);
       setState(() {
-        _accounts = list;
+        _accounts = results[0] as List<Account>;
+        _holdings = (results[1] as List<Holding>).where((h) => h.quantity > 0).toList();
       });
     } catch (e) {
       print('Error loading accounts: $e');
@@ -84,12 +93,39 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     }
   }
 
+  double _getAccountStockValue(Account account) {
+    double totalValueInAccountCurrency = 0.0;
+    final accountCurrency = account.currency.trim().toUpperCase();
+    final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
+
+    for (final holding in _holdings) {
+      if (holding.accountId == account.id && holding.quantity > 0) {
+        // Skip fiat holdings if present, as cash is already captured in currentBalance
+        if (holding.asset?.type == 'fiat') continue;
+
+        final symbol = holding.asset?.symbol ?? '';
+        final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
+        final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
+        totalValueInAccountCurrency += holding.quantity * currentPriceInAccountCurrency;
+      }
+    }
+    return totalValueInAccountCurrency;
+  }
+
+  double _getAccountTotalValue(Account account) {
+    if (account.accountGroup == 'capital' || account.accountGroup == 'retirement') {
+      return account.currentBalance + _getAccountStockValue(account);
+    }
+    return account.currentBalance;
+  }
+
   Future<void> _archive(Account account) async {
-    // Client-side rule validation: balance must be 0.0
-    if (account.currentBalance != 0.0) {
+    // Client-side rule validation: total balance must be 0.0
+    final totalVal = _getAccountTotalValue(account);
+    if (totalVal != 0.0 || account.currentBalance != 0.0) {
       _showErrorDialog(
         'Cannot Archive Account',
-        'Account "${account.name}" cannot be archived because it has a non-zero balance (${formatCurrency(account.currentBalance)}).\n\nPlease reconcile the balance to ${formatCurrency(0)} before archiving.',
+        'Account "${account.name}" cannot be archived because it has a non-zero balance (${formatCurrency(totalVal)}).\n\nPlease reconcile the balance to ${formatCurrency(0)} before archiving.',
       );
       return;
     }
@@ -161,15 +197,16 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
         double balanceMxn;
         double balanceUsd;
         final currency = acc.currency.trim().toUpperCase();
+        final effectiveBalance = _getAccountTotalValue(acc);
         if (currency == 'USD') {
-          balanceUsd = acc.currentBalance;
-          balanceMxn = acc.currentBalance / mxnPriceInUsd;
+          balanceUsd = effectiveBalance;
+          balanceMxn = effectiveBalance / mxnPriceInUsd;
         } else if (currency == 'MXN') {
-          balanceMxn = acc.currentBalance;
-          balanceUsd = acc.currentBalance * mxnPriceInUsd;
+          balanceMxn = effectiveBalance;
+          balanceUsd = effectiveBalance * mxnPriceInUsd;
         } else {
           final accPriceInUsd = CurrencyService().getPrice(currency) ?? 1.0;
-          balanceUsd = acc.currentBalance * accPriceInUsd;
+          balanceUsd = effectiveBalance * accPriceInUsd;
           balanceMxn = balanceUsd / mxnPriceInUsd;
         }
         return AccountSnapshot(
@@ -325,7 +362,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
           controller: _tabController,
           children: [
             _buildAccountList(_cashAndCreditAccounts),
-            _buildAccountList(_capitalAndRetirementAccounts),
+            _buildAccountList(_capitalAndRetirementAccounts, isCapitalTab: true),
             _buildAccountList(_archivedAccounts, isArchivedTab: true),
           ],
         ),
@@ -333,7 +370,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     );
   }
 
-  Widget _buildAccountList(List<Account> list, {bool isArchivedTab = false}) {
+  Widget _buildAccountList(List<Account> list, {bool isArchivedTab = false, bool isCapitalTab = false}) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -349,6 +386,9 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
       itemBuilder: (context, index) {
         final acc = list[index];
         final typeColor = _getColorForAccountType(acc.type);
+        final isCapital = isCapitalTab || acc.accountGroup == 'capital' || acc.accountGroup == 'retirement';
+        final stockValue = isCapital ? _getAccountStockValue(acc) : 0.0;
+        final totalValue = isCapital ? (acc.currentBalance + stockValue) : acc.currentBalance;
         
         return HoverAccountCard(
           typeColor: typeColor,
@@ -397,28 +437,35 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                 ),
 
                 // Currency & Balances
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatCurrency(acc.currentBalance),
-                      style: TextStyle(
-                        color: acc.currentBalance >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                Tooltip(
+                  message: (isCapital && stockValue > 0)
+                      ? 'Cash: ${formatCurrency(acc.currentBalance)} ${acc.currency}\nAssets: ${formatCurrency(stockValue)} ${acc.currency}'
+                      : '',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatCurrency(totalValue),
+                        style: TextStyle(
+                          color: totalValue >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      acc.limit > 0 
-                          ? 'Limit: ${formatCurrency(acc.limit)} ${acc.currency}' 
-                          : acc.currency,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
+                      const SizedBox(height: 2),
+                      Text(
+                        acc.limit > 0 
+                            ? 'Limit: ${formatCurrency(acc.limit)} ${acc.currency}' 
+                            : (isCapital && stockValue > 0 && acc.currentBalance != 0)
+                                ? '${acc.currency} • Cash: ${formatCurrency(acc.currentBalance)}'
+                                : acc.currency,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
                 const SizedBox(width: 8),
