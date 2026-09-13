@@ -372,7 +372,8 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
 
       return _accounts.where((acc) => acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'retirement').toList();
     } else {
-      return _accounts;
+      // Tab 2 (Transfer): All cash-holding accounts (excludes capital accounts since they hold non-cash assets only)
+      return _accounts.where((acc) => acc.accountGroup != 'capital').toList();
     }
   }
 

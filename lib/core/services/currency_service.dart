@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
-import './database_service.dart';
 
 class CurrencyService {
   static final CurrencyService _instance = CurrencyService._internal();
@@ -191,31 +190,10 @@ class CurrencyService {
       return;
     }
 
-    // Step 1: Gather active currencies (e.g. USD, MXN, SOL, KMNO)
+    // Gather active currencies (e.g. USD, MXN, SOL, KMNO)
     final currenciesToFetch = List<String>.from(_activeCurrencies);
 
-    // Step 2: Gather active Stocks & ETFs symbols (holdings > 0)
-    List<String> assetsToFetch = [];
-    try {
-      final dbService = DatabaseService();
-      final holdings = await dbService.fetchHoldings();
-      for (var h in holdings) {
-        if (h.quantity > 0 && h.asset != null) {
-          final type = h.asset!.type.toLowerCase();
-          if (type == 'stock' || type == 'etf') {
-            final sym = h.asset!.symbol.toUpperCase().trim();
-            if (!assetsToFetch.contains(sym)) {
-              assetsToFetch.add(sym);
-            }
-          }
-        }
-      }
-      await _log('Found active holdings in database: $assetsToFetch');
-    } catch (e) {
-      await _log('Warning: could not fetch holdings from database: $e');
-    }
-
-    await _log('Beginning fetch batch. Currencies: $currenciesToFetch, Assets: $assetsToFetch');
+    await _log('Beginning fetch batch. Currencies: $currenciesToFetch');
 
     // Fetch Rates Sequentially with 1 second delay to prevent minute rate limit blocks
     final Map<String, double> newRates = Map.from(_cachedRates);
@@ -247,23 +225,6 @@ class CurrencyService {
       }
     }
 
-    // Fetch Stocks & ETFs
-    for (var symbol in assetsToFetch) {
-      await _log('Fetching price for asset: $symbol...');
-      await Future.delayed(const Duration(milliseconds: 1000));
-      try {
-        final price = await _fetchStockPrice(symbol, apiKey);
-        if (price != null) {
-          newRates[symbol] = price;
-          await _log('Success: $symbol = $price USD');
-        } else {
-          await _log('Failed to fetch price for $symbol (retaining cached value).');
-        }
-      } catch (e) {
-        await _log('Error fetching stock $symbol: $e');
-      }
-    }
-
     // Update state and save
     _cachedRates = newRates;
     _lastFetchTime = DateTime.now();
@@ -292,26 +253,6 @@ class CurrencyService {
     if (data.containsKey('Realtime Currency Exchange Rate')) {
       final rateStr = data['Realtime Currency Exchange Rate']['5. Exchange Rate'];
       return double.tryParse(rateStr ?? '');
-    } else if (data.containsKey('Note')) {
-      await _log('API Throttling Note: ${data['Note']}');
-    } else if (data.containsKey('Error Message')) {
-      await _log('API Error: ${data['Error Message']}');
-    } else if (data.containsKey('Information')) {
-      await _log('API Info: ${data['Information']}');
-    }
-    return null;
-  }
-
-  /// Fetch stock / ETF price from AlphaVantage API.
-  Future<double?> _fetchStockPrice(String symbol, String apiKey) async {
-    final url = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=$symbol&apikey=$apiKey';
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return null;
-
-    final data = json.decode(response.body);
-    if (data.containsKey('Global Quote') && data['Global Quote'].containsKey('05. price')) {
-      final priceStr = data['Global Quote']['05. price'];
-      return double.tryParse(priceStr ?? '');
     } else if (data.containsKey('Note')) {
       await _log('API Throttling Note: ${data['Note']}');
     } else if (data.containsKey('Error Message')) {

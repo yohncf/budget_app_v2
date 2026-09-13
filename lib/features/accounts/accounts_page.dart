@@ -51,13 +51,12 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
   late TabController _tabController;
 
   List<Account> _accounts = [];
-  List<Holding> _holdings = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     loadAccounts();
   }
 
@@ -73,16 +72,9 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     });
     try {
       await CurrencyService().initialize();
-      final accountsFuture = _databaseService.fetchAccounts();
-      final holdingsFuture = _databaseService.fetchHoldings().catchError((e) {
-        print('Error loading holdings in AccountsPage: $e');
-        return <Holding>[];
-      });
-
-      final results = await Future.wait([accountsFuture, holdingsFuture]);
+      final accounts = await _databaseService.fetchAccounts();
       setState(() {
-        _accounts = results[0] as List<Account>;
-        _holdings = (results[1] as List<Holding>).where((h) => h.quantity > 0).toList();
+        _accounts = accounts;
       });
     } catch (e) {
       print('Error loading accounts: $e');
@@ -93,39 +85,12 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     }
   }
 
-  double _getAccountStockValue(Account account) {
-    double totalValueInAccountCurrency = 0.0;
-    final accountCurrency = account.currency.trim().toUpperCase();
-    final accountCurrencyPriceInUSD = CurrencyService().getPrice(accountCurrency) ?? 1.0;
-
-    for (final holding in _holdings) {
-      if (holding.accountId == account.id && holding.quantity > 0) {
-        // Skip fiat holdings if present, as cash is already captured in currentBalance
-        if (holding.asset?.type == 'fiat') continue;
-
-        final symbol = holding.asset?.symbol ?? '';
-        final currentPriceInUSD = CurrencyService().getPrice(symbol) ?? holding.avgBuyPrice;
-        final currentPriceInAccountCurrency = currentPriceInUSD / accountCurrencyPriceInUSD;
-        totalValueInAccountCurrency += holding.quantity * currentPriceInAccountCurrency;
-      }
-    }
-    return totalValueInAccountCurrency;
-  }
-
-  double _getAccountTotalValue(Account account) {
-    if (account.accountGroup == 'capital' || account.accountGroup == 'retirement') {
-      return account.currentBalance + _getAccountStockValue(account);
-    }
-    return account.currentBalance;
-  }
-
   Future<void> _archive(Account account) async {
     // Client-side rule validation: total balance must be 0.0
-    final totalVal = _getAccountTotalValue(account);
-    if (totalVal != 0.0 || account.currentBalance != 0.0) {
+    if (account.currentBalance != 0.0) {
       _showErrorDialog(
         'Cannot Archive Account',
-        'Account "${account.name}" cannot be archived because it has a non-zero balance (${formatCurrency(totalVal)}).\n\nPlease reconcile the balance to ${formatCurrency(0)} before archiving.',
+        'Account "${account.name}" cannot be archived because it has an active balance (${formatCurrency(account.currentBalance)}).\n\nPlease reconcile to ${formatCurrency(0)} before archiving.',
       );
       return;
     }
@@ -145,7 +110,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
   }
 
   Future<void> _createSnapshot() async {
-    final activeAccounts = _accounts.where((acc) => acc.status != 'archived').toList();
+    final activeAccounts = _cashAndCreditAccounts;
     if (activeAccounts.isEmpty) {
       _showErrorDialog('No Active Accounts', 'There are no active accounts to take a snapshot of.');
       return;
@@ -197,7 +162,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
         double balanceMxn;
         double balanceUsd;
         final currency = acc.currency.trim().toUpperCase();
-        final effectiveBalance = _getAccountTotalValue(acc);
+        final effectiveBalance = acc.currentBalance;
         if (currency == 'USD') {
           balanceUsd = effectiveBalance;
           balanceMxn = effectiveBalance / mxnPriceInUsd;
@@ -283,17 +248,12 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
       ..sort(_compareAccounts);
   }
 
-  List<Account> get _capitalAndRetirementAccounts {
+  List<Account> get _archivedAccounts {
     return _accounts
         .where((acc) =>
-            acc.status != 'archived' &&
-            (acc.accountGroup == 'capital' || acc.accountGroup == 'retirement'))
+            acc.status == 'archived' &&
+            (acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'credit' || acc.accountGroup == 'credits'))
         .toList()
-      ..sort(_compareAccounts);
-  }
-
-  List<Account> get _archivedAccounts {
-    return _accounts.where((acc) => acc.status == 'archived').toList()
       ..sort(_compareAccounts);
   }
 
@@ -350,7 +310,6 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                   unselectedLabelColor: Colors.white70,
                   tabs: const [
                     Tab(text: 'Cash and Credit'),
-                    Tab(text: 'Capital and retirement'),
                     Tab(text: 'Archived'),
                   ],
                 ),
@@ -362,7 +321,6 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
           controller: _tabController,
           children: [
             _buildAccountList(_cashAndCreditAccounts),
-            _buildAccountList(_capitalAndRetirementAccounts, isCapitalTab: true),
             _buildAccountList(_archivedAccounts, isArchivedTab: true),
           ],
         ),
@@ -370,7 +328,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
     );
   }
 
-  Widget _buildAccountList(List<Account> list, {bool isArchivedTab = false, bool isCapitalTab = false}) {
+  Widget _buildAccountList(List<Account> list, {bool isArchivedTab = false}) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -386,9 +344,7 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
       itemBuilder: (context, index) {
         final acc = list[index];
         final typeColor = _getColorForAccountType(acc.type);
-        final isCapital = isCapitalTab || acc.accountGroup == 'capital' || acc.accountGroup == 'retirement';
-        final stockValue = isCapital ? _getAccountStockValue(acc) : 0.0;
-        final totalValue = isCapital ? (acc.currentBalance + stockValue) : acc.currentBalance;
+        final totalValue = acc.currentBalance;
         
         return HoverAccountCard(
           typeColor: typeColor,
@@ -437,35 +393,28 @@ class AccountsPageState extends State<AccountsPage> with SingleTickerProviderSta
                 ),
 
                 // Currency & Balances
-                Tooltip(
-                  message: (isCapital && stockValue > 0)
-                      ? 'Cash: ${formatCurrency(acc.currentBalance)} ${acc.currency}\nAssets: ${formatCurrency(stockValue)} ${acc.currency}'
-                      : '',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        formatCurrency(totalValue),
-                        style: TextStyle(
-                          color: totalValue >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formatCurrency(totalValue),
+                      style: TextStyle(
+                        color: totalValue >= 0 ? AppColors.limeMoss : AppColors.cinnabar,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        acc.limit > 0 
-                            ? 'Limit: ${formatCurrency(acc.limit)} ${acc.currency}' 
-                            : (isCapital && stockValue > 0 && acc.currentBalance != 0)
-                                ? '${acc.currency} • Cash: ${formatCurrency(acc.currentBalance)}'
-                                : acc.currency,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                        ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      acc.limit > 0 
+                          ? 'Limit: ${formatCurrency(acc.limit)} ${acc.currency}' 
+                          : acc.currency,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(width: 8),
@@ -564,7 +513,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   bool _isSaving = false;
 
   final List<String> _types = ['checking', 'savings', 'credit_card', 'investment', 'crypto_wallet', 'cash'];
-  final List<String> _groups = ['liquid_assets', 'credit', 'capital', 'retirement'];
+  final List<String> _groups = ['liquid_assets', 'credit'];
   final List<String> _statuses = ['active', 'inactive', 'archived'];
 
   @override
@@ -578,6 +527,9 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     _balance = acc?.currentBalance ?? 0.0;
     _limit = acc?.limit ?? 0.0;
     _accountGroup = (acc?.accountGroup ?? 'liquid_assets').trim().toLowerCase();
+    if (!_groups.contains(_accountGroup)) {
+      _accountGroup = 'liquid_assets';
+    }
     _status = (acc?.status ?? 'active').trim().toLowerCase();
   }
 

@@ -5,8 +5,6 @@ import '../dashboard/dashboard_page.dart';
 import '../accounts/accounts_page.dart';
 import '../transactions/transactions_page.dart';
 import '../transactions/add_transaction_bottom_sheet.dart';
-import '../assets/assets_page.dart';
-import '../assets/add_asset_transaction_bottom_sheet.dart';
 import '../../core/services/currency_service.dart';
 import '../settings/settings_page.dart';
 
@@ -22,58 +20,26 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMixin {
+class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
   bool _isRailExpanded = true;
-  bool _isMenuOpen = false;
-
-  late AnimationController _animationController;
-  late Animation<double> _expandAnimation;
 
   // GlobalKeys to trigger reloads in child pages
   final GlobalKey<AccountsPageState> _accountsKey = GlobalKey<AccountsPageState>();
   final GlobalKey<TransactionsPageState> _transactionsKey = GlobalKey<TransactionsPageState>();
   final GlobalKey<DashboardPageState> _dashboardKey = GlobalKey<DashboardPageState>();
-  final GlobalKey<AssetsPageState> _assetsKey = GlobalKey<AssetsPageState>();
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _expandAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    );
-    
     // Trigger currency rates checking on login/startup
     CurrencyService().checkAndFetchRatesOnLogin();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    setState(() {
-      _isMenuOpen = !_isMenuOpen;
-      if (_isMenuOpen) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
-    });
   }
 
   void _triggerRefresh() {
     _accountsKey.currentState?.loadAccounts();
     _transactionsKey.currentState?.loadTransactions(reset: true);
     _dashboardKey.currentState?.loadData();
-    _assetsKey.currentState?.loadData();
   }
 
   Widget _getActivePage() {
@@ -85,8 +51,6 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       case 2:
         return TransactionsPage(key: _transactionsKey);
       case 3:
-        return AssetsPage(key: _assetsKey);
-      case 4:
         return const SettingsPage();
       default:
         return const Center(child: Text('Page not found'));
@@ -114,11 +78,6 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         selectedIcon: Icon(Icons.swap_horiz, color: AppColors.limeMoss),
         label: 'Transactions',
       ),
-      NavigationDestination(
-        icon: Icon(Icons.trending_up_outlined),
-        selectedIcon: Icon(Icons.trending_up, color: AppColors.limeMoss),
-        label: 'Assets',
-      ),
     ];
 
     final List<SidebarDestination> sidebarDestinations = const [
@@ -136,11 +95,6 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
         icon: Icons.swap_horiz_outlined,
         selectedIcon: Icons.swap_horiz,
         label: 'Transactions',
-      ),
-      SidebarDestination(
-        icon: Icons.trending_up_outlined,
-        selectedIcon: Icons.trending_up,
-        label: 'Assets',
       ),
     ];
 
@@ -169,12 +123,12 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                 IconButton(
                   icon: Icon(
                     Icons.settings,
-                    color: _selectedIndex == 4 ? AppColors.limeMoss : Colors.white70,
+                    color: _selectedIndex == 3 ? AppColors.limeMoss : Colors.white70,
                   ),
                   tooltip: 'Settings',
                   onPressed: () {
                     setState(() {
-                      _selectedIndex = 4;
+                      _selectedIndex = 3;
                     });
                   },
                 ),
@@ -211,7 +165,7 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
+                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(Icons.account_balance_wallet, color: AppColors.limeMoss, size: 24),
@@ -283,12 +237,12 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
                             IconButton(
                               icon: Icon(
                                 Icons.settings,
-                                color: _selectedIndex == 4 ? AppColors.limeMoss : Colors.white70,
+                                color: _selectedIndex == 3 ? AppColors.limeMoss : Colors.white70,
                               ),
                               tooltip: 'Settings',
                               onPressed: () {
                                 setState(() {
-                                  _selectedIndex = 4;
+                                  _selectedIndex = 3;
                                 });
                               },
                             ),
@@ -321,129 +275,18 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
             ],
           ),
 
-          // Speed Dial Overlay scrim background
-          if (_isMenuOpen)
-            GestureDetector(
-              onTap: _toggleMenu,
-              child: Container(
-                color: Colors.black.withOpacity(0.5),
-              ),
-            ),
-
-          // Custom FAB with Expandable Speed Dial Menu
+          // Add Transaction Floating Action Button
           Positioned(
             right: 24,
             bottom: isDesktop ? 24 : 96, // Lift if mobile bar is showing
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Sub-FAB Option 1: Add Transaction Pill Menu
-                // Styled as a rounded horizontal lavender container enclosing both the icon and label text.
-                SizeTransition(
-                  sizeFactor: _expandAnimation,
-                  child: ScaleTransition(
-                    scale: _expandAnimation,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          _toggleMenu();
-                          _showAddTransactionDialog();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE2E0FF), // Lavender background
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              )
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.swap_horiz, color: Color(0xFF1E1446), size: 20),
-                              SizedBox(width: 10),
-                              Text(
-                                'Add Transaction',
-                                style: TextStyle(
-                                  color: Color(0xFF1E1446),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Sub-FAB Option 2: Add Asset Operation Pill Menu
-                // Styled as a rounded purple container. Triggers asset specific operations.
-                SizeTransition(
-                  sizeFactor: _expandAnimation,
-                  child: ScaleTransition(
-                    scale: _expandAnimation,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          _toggleMenu();
-                          _showAddAssetTransactionBottomSheet();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFCEBFFF), // Muted purple background
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              )
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.trending_up, color: Color(0xFF1C1146), size: 20),
-                              SizedBox(width: 10),
-                              Text(
-                                'Record asset operation',
-                                style: TextStyle(
-                                  color: Color(0xFF1C1146),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Main Toggle FAB: Circular action button that rotates and transitions
-                // background colors based on whether the speed dial is open (slate purple) or closed (volt lime).
-                FloatingActionButton(
-                  heroTag: 'main_fab',
-                  backgroundColor: _isMenuOpen ? const Color(0xFF5D528F) : AppColors.limeMoss,
-                  foregroundColor: _isMenuOpen ? Colors.white : Colors.black,
-                  shape: const CircleBorder(),
-                  onPressed: _toggleMenu,
-                  child: RotationTransition(
-                    turns: Tween<double>(begin: 0.0, end: 0.125).animate(_expandAnimation),
-                    child: const Icon(Icons.add, size: 28),
-                  ),
-                ),
-              ],
+            child: FloatingActionButton(
+              heroTag: 'main_fab',
+              backgroundColor: AppColors.limeMoss,
+              foregroundColor: Colors.black,
+              shape: const CircleBorder(),
+              tooltip: 'Add Transaction',
+              onPressed: _showAddTransactionDialog,
+              child: const Icon(Icons.add, size: 28),
             ),
           ),
         ],
@@ -471,19 +314,6 @@ class _MainLayoutState extends State<MainLayout> with SingleTickerProviderStateM
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddTransactionBottomSheet(
-        onSaved: () {
-          _triggerRefresh();
-        },
-      ),
-    );
-  }
-
-  void _showAddAssetTransactionBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => AddAssetTransactionBottomSheet(
         onSaved: () {
           _triggerRefresh();
         },

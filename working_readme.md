@@ -50,44 +50,30 @@ Logs the chronological history of asset purchases, sales, and adjustments.
 
 The business logic resides in `DatabaseService` (`lib/core/services/database_service.dart`).
 
-### Residual Cash & Currency Sync
-Rather than tracking loose cash as an independent variable, the system defines it as the residual cash of the account's total value after subtracting the book value of all non-cash holdings:
-$$\text{Loose Cash (Fiat Holding Quantity)} = \text{Account current\_balance} - \sum_{\text{non-cash holdings}} (\text{Quantity} \times \text{Average Buy Price})$$
-The symbol of the fiat holding matches the account's currency (`USD` or `MXN`).
+### Asset-Only Capital Accounts
+Capital accounts hold investment assets only (e.g., stocks, ETFs, crypto) and **do not hold cash**. Across the entire application, a capital account's total value is computed strictly as the sum of the values of its asset holdings at that time based on the last cached price of each asset:
+$$\text{Capital Account Total Value} = \sum_{\text{holdings}} (\text{Quantity} \times \text{Cached Price in Account Currency})$$
 
 ### Transaction Application (`_applyAssetTransactionImpact`)
-When an asset transaction is logged, it changes the holdings and custody account total balance (`current_balance`) according to these rules:
-1. **Custody Account Balance (`current_balance`)**:
-   - **BUY** & **SPLIT**: Net balance change is `0.0`. Cash is swapped for stock value, leaving total value unchanged.
-   - **SELL**: Realized profit/loss is added/subtracted: `quantity * (unitPrice - avgBuyPrice)`.
-   - **DIVIDEND REINVEST** & **REWARD**: The total value is increased by the incoming asset amount: `quantity * unitPrice`.
-2. **Holdings Quantity**:
+When an asset transaction is logged, it updates the `holdings` table directly without impacting cash balances:
+1. **Holdings Quantity**:
    - `buy`, `dividend_reinvest`, `reward`, `split`: Increases quantity (`+ quantity`).
    - `sell`: Decreases quantity (`- quantity`).
-3. **Cost Basis (Average Buy Price)**:
+2. **Cost Basis (Average Buy Price)**:
    - **Acquisition** (`buy`, `dividend_reinvest`, `reward`): Re-calculates a new weighted average buy price:
      $$\text{New Avg Price} = \frac{(\text{Old Qty} \times \text{Old Avg Price}) + (\text{Tx Qty} \times \text{Tx Price})}{\text{Old Qty} + \text{Tx Qty}}$$
-   - **Disposition** (`sell`): Quantity decreases but cost basis remains unchanged.
-4. **Fiat Holding Sync**:
-   - After updating the target stock holding and custody account balance, `syncFiatHolding` is invoked. It recalculates the loose cash using the residual formula and updates the matching `USD` or `MXN` holding in the database.
+   - **Disposition** (`sell`): Quantity decreases while the unit cost basis remains unchanged.
+3. **No Cash Dependency**:
+   - Buying assets does not require cash in the custody account.
+   - Selling assets decrements holding units without modifying custody cash balances.
 
 ### Transaction Reversal (`_reverseAssetTransactionImpact`)
 When a transaction is updated or deleted:
-1. **Reverses Account Balance**: Reverts the balance change (e.g. SELL subtracts the realized gain; DIVIDEND reinvest subtracts its value).
-2. **Reverses Stock Holdings**: Subtracts/adds back transacted stock units and de-weights the cost basis.
-3. **Reverses Fiat Holding**: Recalculates loose cash residual.
+1. **Reverses Stock Holdings**: Subtracts/adds back transacted units and recalculates or reverts the weighted cost basis.
+2. **No Account Balance Mutation**: Custody accounts maintain a non-cash profile.
 
 ### Edit Operations (`saveAssetTransaction`)
-An edit is processed atomically by first reversing the old transaction’s impact and then applying the new transaction's impact.
-
-### Advanced Cash Validation
-
-To maintain high data integrity, the system implements the following advanced restrictions:
-1. **Purchase Cash Validation**:
-   - Assets of type stock, ETF, or crypto can only be purchased if the custody account has sufficient available cash (represented by the matching `fiat` holding).
-   - Validation occurs both on the client side (before submitting the form, showing a warning snackbar) and on the service layer (raising a runtime exception to abort illegal saves).
-2. **Inflows/Transfers Auto-Sync**:
-   - When a transfer is made to a capital/retirement account, or any other income occurs, the account balance changes, which immediately triggers the fiat holdings sync. This automatically reflects the cash inflow in the holdings table without double-charging the account.
+An edit is processed atomically by first reversing the old transaction’s holdings impact and then applying the new transaction's impact.
 
 ---
 
@@ -213,17 +199,21 @@ In the Transaction Modal (`AddTransactionBottomSheet` in `lib/features/transacti
   - **Default**: Displays `liquid_assets` and `retirement` accounts. Credit card accounts are hidden by default to prevent logging standard income against credit lines.
   - **Reimbursement Special Rule**: When a category of type `'reimbursement'` or matching the name `"Reimbursement"` (e.g., Cashback, refunds, expense returns) is selected or typed in the Category search box, credit card accounts (`accountGroup == 'credit'`) are dynamically enabled. This allows logging cashback credits or reimbursements directly to credit cards (which decreases the credit card debt/balance).
   - **Auto-Reset Safeguard**: If a credit card account is selected and the category is subsequently changed to a non-reimbursement income category (e.g. Salary), the account field is automatically reset to prevent invalid entries.
-* **Transfer Tab (`tabIndex == 2`)**: Displays all active accounts.
+* **Transfer Tab (`tabIndex == 2`)**: Displays all active accounts except capital accounts (since capital accounts hold non-cash investment assets only).
 
 ---
 
-## 10. Capital & Retirement Account Total Value (Assets + Cash)
+## 10. Capital & Retirement Account Valuation
 
 ### Overview
-In the Accounts page (`AccountsPage` in `lib/features/accounts/accounts_page.dart`), accounts under the **"Capital and retirement"** section display their combined total value:
-* **Total Account Value**: Computed as today's market value of all non-fiat asset positions (stocks, ETFs, crypto) held in that custody account plus the cash (USD/fiat) balance (`currentBalance`).
+In the Accounts page (`AccountsPage` in `lib/features/accounts/accounts_page.dart`), accounts under the **"Capital and retirement"** section display their valuation:
+* **Capital Accounts**:
+  - **Asset-Based Value**: Value is calculated strictly from the sum of active asset positions held in that custody account multiplied by the current cached price in the account currency:
+    $$\text{Capital Account Total Value} = \sum_{\text{holdings}} (\text{Quantity} \times \text{Cached Price in Account Currency})$$
+  - **No Cash**: Capital accounts do not maintain a cash balance. Subtitles show solely the account currency (e.g., `USD`) without any cash amounts.
+* **Retirement Accounts**:
+  - Displays combined total value (cash balance `currentBalance` plus active asset positions).
 * **Dynamic Asset Pricing**: Uses real-time cached rates from `CurrencyService` (`CurrencyService().getPrice(symbol)` with fallback to `avgBuyPrice`) converted into the account's base currency.
-* **Cash Subtitle & Tooltip**: When both cash and asset holdings are present, the card subtitle displays the base currency and cash balance (e.g. `USD • Cash: $500.00`), and hovering reveals a detailed tooltip breaking down cash vs. assets.
 * **Snapshots & Archiving Consistency**:
-  - `Create Snapshot` records the full combined value (stocks + cash) for capital and retirement accounts in `account_snapshots`.
-  - Archiving validation ensures capital accounts with remaining asset holdings cannot be archived until fully liquidated/reconciled.
+  - `Create Snapshot` records the effective total value for all accounts (purely asset-based for capital accounts) in `account_snapshots`.
+  - Archiving validation ensures capital accounts with remaining asset holdings cannot be archived until fully liquidated/reconciled (`totalValue == 0.0`).

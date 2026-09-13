@@ -82,22 +82,14 @@ void main() {
     final cashAndCredit = accounts.where((acc) =>
         acc.status != 'archived' &&
         (acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'credit' || acc.accountGroup == 'credits')).toList();
-    
-    // Filter 2: Capital and Retirement (non-archived capital, retirement)
-    final capitalAndRetirement = accounts.where((acc) =>
-        acc.status != 'archived' &&
-        (acc.accountGroup == 'capital' || acc.accountGroup == 'retirement')).toList();
 
-    // Filter 3: Archived
-    final archived = accounts.where((acc) => acc.status == 'archived').toList();
+    // Filter 2: Archived (liquid_assets, credit)
+    final archived = accounts.where((acc) =>
+        acc.status == 'archived' &&
+        (acc.accountGroup == 'liquid_assets' || acc.accountGroup == 'credit' || acc.accountGroup == 'credits')).toList();
 
     expect(cashAndCredit.length, 2);
-    expect(cashAndCredit[0].name, 'Checking');
-    expect(cashAndCredit[1].name, 'Credit Card');
-
-    expect(capitalAndRetirement.length, 2);
-    expect(capitalAndRetirement[0].name, 'Investment');
-    expect(capitalAndRetirement[1].name, 'IRA');
+    expect(cashAndCredit.map((a) => a.name), containsAll(['Checking', 'Credit Card']));
 
     expect(archived.length, 1);
     expect(archived[0].name, 'Old Wallet');

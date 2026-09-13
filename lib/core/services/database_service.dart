@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
-import '../utils/currency_formatter.dart';
 
 class DatabaseService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -30,8 +29,11 @@ class DatabaseService {
 
   Future<Account> saveAccount(Account account) async {
     try {
-      await _client.from('accounts').upsert(account.toJson());
-      return account;
+      final accountToSave = account.accountGroup == 'capital'
+          ? account.copyWith(currentBalance: 0.0)
+          : account;
+      await _client.from('accounts').upsert(accountToSave.toJson());
+      return accountToSave;
     } catch (e) {
       print('Supabase saveAccount error: $e');
       rethrow;
@@ -42,7 +44,7 @@ class DatabaseService {
     // Client-side rule: Verify balance is zero
     final accounts = await fetchAccounts();
     final account = accounts.firstWhere((acc) => acc.id == id);
-    if (account.currentBalance != 0.0) {
+    if (account.accountGroup != 'capital' && account.currentBalance != 0.0) {
       throw Exception('Cannot archive account. Current balance is not 0.0 (Actual: ${account.currentBalance})');
     }
 
@@ -617,53 +619,18 @@ class DatabaseService {
     }
   }
 
-  /// Writes an AssetTransaction row to Supabase and computes its cascading financial impacts.
+  /// Writes an AssetTransaction row to Supabase and computes its cascading financial impacts on holdings.
   /// If [oldTx] is supplied, it represents an edit operation, so the previous transaction's
   /// impact is completely reversed before the new transaction's impact is applied.
   Future<void> saveAssetTransaction(AssetTransaction tx, {AssetTransaction? oldTx}) async {
     try {
-      final txType = tx.type.toLowerCase();
-      
-      // If we are buying a non-fiat asset, verify that there is enough cash (fiat holding) in the account
-      if (txType == 'buy') {
-        // Fetch the asset info to make sure it's not a fiat asset we're buying
-        final assetResponse = await _client.from('assets').select().eq('id', tx.assetId).single();
-        final asset = Asset.fromJson(assetResponse);
-        
-        if (asset.type != 'fiat') {
-          // Fetch the account to get currency
-          final accountResponse = await _client.from('accounts').select().eq('id', tx.accountId).single();
-          final account = Account.fromJson(accountResponse);
-          
-          final fiatAsset = await fetchFiatAssetForCurrency(account.currency);
-          if (fiatAsset != null) {
-            final fiatHolding = await fetchHolding(tx.accountId, fiatAsset.id);
-            double availableCash = fiatHolding?.quantity ?? 0.0;
-            
-            // If editing, add back the cash from the old transaction since we will reverse it
-            if (oldTx != null && oldTx.type.toLowerCase() == 'buy') {
-              availableCash += (oldTx.quantity * oldTx.unitPrice);
-            }
-            
-            final double requiredCash = tx.quantity * tx.unitPrice;
-            if (availableCash < requiredCash) {
-              throw Exception(
-                'Insufficient cash (${account.currency}) to buy this asset. '
-                'Required: ${formatCurrency(requiredCash)}, '
-                'Available: ${formatCurrency(availableCash)}'
-              );
-            }
-          }
-        }
-      }
-
       if (oldTx != null) {
-        // Step 1: Revert all balance adjustments associated with the old version
+        // Step 1: Revert all holdings adjustments associated with the old version
         await _reverseAssetTransactionImpact(oldTx);
       }
       // Step 2: Write the transaction row to database
       await _client.from('asset_transactions').upsert(tx.toJson());
-      // Step 3: Compute and apply the new ledger balance modifications
+      // Step 3: Compute and apply the new holdings modifications
       await _applyAssetTransactionImpact(tx);
     } catch (e) {
       print('Supabase saveAssetTransaction error: $e');
@@ -674,7 +641,7 @@ class DatabaseService {
   /// Deletes an AssetTransaction row from Supabase and reverses its financial impact.
   Future<void> deleteAssetTransaction(AssetTransaction tx) async {
     try {
-      // Step 1: Revert all balance adjustments first
+      // Step 1: Revert all holdings adjustments first
       await _reverseAssetTransactionImpact(tx);
       // Step 2: Delete the transaction row from database
       await _client.from('asset_transactions').delete().eq('id', tx.id);
@@ -684,25 +651,11 @@ class DatabaseService {
     }
   }
 
-  /// Computes and applies ledger impact updates on cash accounts and holdings tables.
+  /// Computes and applies ledger impact updates on holdings tables.
   Future<void> _applyAssetTransactionImpact(AssetTransaction tx) async {
     final txType = tx.type.toLowerCase();
     
-    // --- 1. Calculate Custody Account Balance Change ---
-    // Asset trades are swaps inside the custody account.
-    // Buying stocks turns cash into stocks, leaving total balance unchanged.
-    // Selling stocks changes total balance by the realized gain/loss (proceeds - book cost).
-    // Dividend reinvestments and rewards add value, increasing total balance.
-    double balanceChange = 0.0;
-    if (txType == 'sell') {
-      final holding = await fetchHolding(tx.accountId, tx.assetId);
-      final double avgPrice = holding?.avgBuyPrice ?? tx.unitPrice;
-      balanceChange = tx.quantity * (tx.unitPrice - avgPrice);
-    } else if (txType == 'dividend_reinvest' || txType == 'reward') {
-      balanceChange = tx.quantity * tx.unitPrice;
-    }
-
-    // --- 2. Reconcile Stock/ETF/Crypto holdings quantity & cost basis ---
+    // --- Reconcile Stock/ETF/Crypto holdings quantity & cost basis ---
     final holding = await fetchHolding(tx.accountId, tx.assetId);
     if (holding == null) {
       // If position doesn't exist, create a new holding position entry.
@@ -752,28 +705,13 @@ class DatabaseService {
       );
       await saveHolding(updatedHolding);
     }
-
-    // --- 3. Update account current_balance and trigger fiat cash sync ---
-    // This updates the accounts table and invokes syncFiatHolding.
-    // It must run after holdings are updated so syncFiatHolding sees the correct non-cash book values.
-    await updateAccountBalance(tx.accountId, balanceChange);
   }
 
-  /// Subtracts/Reverses a transaction's ledger impact on custody cash and active holdings.
+  /// Subtracts/Reverses a transaction's ledger impact on active holdings.
   Future<void> _reverseAssetTransactionImpact(AssetTransaction tx) async {
     final txType = tx.type.toLowerCase();
-    
-    // --- 1. Calculate balance change reversal ---
-    double balanceChange = 0.0;
-    if (txType == 'sell') {
-      final holding = await fetchHolding(tx.accountId, tx.assetId);
-      final double avgPrice = holding?.avgBuyPrice ?? tx.unitPrice;
-      balanceChange = -(tx.quantity * (tx.unitPrice - avgPrice));
-    } else if (txType == 'dividend_reinvest' || txType == 'reward') {
-      balanceChange = -(tx.quantity * tx.unitPrice);
-    }
 
-    // --- 2. holdings Reversal ---
+    // --- holdings Reversal ---
     final holding = await fetchHolding(tx.accountId, tx.assetId);
     if (holding != null) {
       double oldQty = holding.quantity;
@@ -807,9 +745,6 @@ class DatabaseService {
       );
       await saveHolding(updatedHolding);
     }
-
-    // --- 3. Revert custody account balance and trigger fiat holding sync ---
-    await updateAccountBalance(tx.accountId, balanceChange);
   }
 
   /// Locates the master fiat asset row corresponding to a given currency code.
@@ -832,18 +767,24 @@ class DatabaseService {
     }
   }
 
-  /// Reconciles the cash position of a capital or retirement account with the holdings table.
-  /// Retrieves the current cash balance (`current_balance`) of the custody account and updates
-  /// the quantity of its matching fiat asset holding (symbol matching the currency code: USD/MXN).
-  /// This ensures that cash shifts from transfers, income, or stock sales are accurately reflected in holdings.
+  /// Reconciles the cash position of a retirement account with the holdings table.
+  /// NOTE: Capital accounts do not track cash positions or fiat holdings.
   Future<void> syncFiatHolding(String accountId) async {
     try {
       final response = await _client.from('accounts').select().eq('id', accountId).single();
       final account = Account.fromJson(response);
       
-      // Sync rules only apply to capital and retirement accounts holding investment assets
-      final isCapitalOrRetirement = account.accountGroup == 'capital' || account.accountGroup == 'retirement';
-      if (!isCapitalOrRetirement) return;
+      if (account.accountGroup == 'capital') {
+        // Capital accounts do not hold cash or fiat holdings. Clean up any legacy fiat holdings.
+        final fiatAsset = await fetchFiatAssetForCurrency(account.currency);
+        if (fiatAsset != null) {
+          await _client.from('holdings').delete().eq('account_id', accountId).eq('asset_id', fiatAsset.id);
+        }
+        return;
+      }
+
+      // Sync rules only apply to retirement accounts holding investment assets
+      if (account.accountGroup != 'retirement') return;
 
       final fiatAsset = await fetchFiatAssetForCurrency(account.currency);
       if (fiatAsset == null) {
@@ -898,13 +839,18 @@ class DatabaseService {
     }
   }
 
-  /// Scans all active accounts and synchronizes their cash balances with the holdings database.
-  /// Invoked during loading/retrieving holdings, serving as a self-healing sweep of legacy balances.
+  /// Scans all active accounts and cleans up legacy fiat holdings for capital accounts
+  /// while synchronizing retirement cash balances with the holdings database.
   Future<void> syncAllFiatHoldings() async {
     try {
       final accounts = await fetchAccounts();
       for (final account in accounts) {
-        if (account.accountGroup == 'capital' || account.accountGroup == 'retirement') {
+        if (account.accountGroup == 'capital') {
+          final fiatAsset = await fetchFiatAssetForCurrency(account.currency);
+          if (fiatAsset != null) {
+            await _client.from('holdings').delete().eq('account_id', account.id).eq('asset_id', fiatAsset.id);
+          }
+        } else if (account.accountGroup == 'retirement') {
           await syncFiatHolding(account.id);
         }
       }
