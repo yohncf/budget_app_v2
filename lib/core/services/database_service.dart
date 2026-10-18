@@ -103,9 +103,10 @@ class DatabaseService {
         }
       }
 
-      // Execute paginated and ordered query
+      // Execute paginated and ordered query: newest date/time first, fallback to newest created_at
       final response = await queryBuilder
           .order('date', ascending: false)
+          .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       return (response as List).map((json) => Transaction.fromJson(json)).toList();

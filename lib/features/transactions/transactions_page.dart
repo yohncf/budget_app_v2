@@ -17,7 +17,7 @@ class TransactionsPageState extends State<TransactionsPage> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
 
-  List<Transaction> _transactions = [];
+  final List<Transaction> _transactions = [];
   bool _isLoading = false;
   bool _hasMore = true;
   int _offset = 0;
@@ -76,6 +76,11 @@ class TransactionsPageState extends State<TransactionsPage> {
 
       setState(() {
         _transactions.addAll(list);
+        _transactions.sort((a, b) {
+          final dateCmp = b.date.compareTo(a.date);
+          if (dateCmp != 0) return dateCmp;
+          return b.createdAt.compareTo(a.createdAt);
+        });
         _offset += list.length;
         if (list.length < _limit) {
           _hasMore = false;
@@ -405,7 +410,7 @@ class TransactionsPageState extends State<TransactionsPage> {
                                     ),
                                   ),
                                   Text(
-                                    DateFormat('MMM dd, yyyy - hh:mm a').format(tx.date),
+                                    DateFormat('MMM dd, yyyy - hh:mm a').format(tx.date.toLocal()),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 11,

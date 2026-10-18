@@ -421,15 +421,15 @@ class _AddTransactionBottomSheetState extends State<AddTransactionBottomSheet> w
 
     if (picked != null) {
       setState(() {
-        final now = DateTime.now();
+        final timeSource = widget.transaction?.date ?? DateTime.now();
         _selectedDate = DateTime(
           picked.year,
           picked.month,
           picked.day,
-          now.hour,
-          now.minute,
-          now.second,
-          now.millisecond,
+          timeSource.hour,
+          timeSource.minute,
+          timeSource.second,
+          timeSource.millisecond,
         );
       });
     }
